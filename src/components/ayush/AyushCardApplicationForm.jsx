@@ -21,7 +21,12 @@ import {
 } from "lucide-react";
 import { useToast } from "../ui/Toast";
 import apiService from "../../api/service";
-import { performOCR } from "../../utils/ocr";
+import {
+  performOCR,
+  performAadhaarBackOCR,
+  AADHAAR_OCR_LOW_CONFIDENCE_MSG,
+  isValidAadhaarName,
+} from "../../utils/ocr";
 import { load } from "@cashfreepayments/cashfree-js";
 import AyushCardPreview from "../admin/AyushCardPreview";
 import QRCode from "react-qr-code";
@@ -132,6 +137,7 @@ const AyushCardApplicationForm = ({
   const [docBack, setDocBack] = useState(null);
   /** File input for OCR (1st document) — camera gallery + review replace */
   const ocrFileInputRef = useRef(null);
+  const backOcrFileInputRef = useRef(null);
   const docBackInputRef = useRef(null);
   const docBackCameraInputRef = useRef(null);
   const headImageInputRef = useRef(null);
@@ -164,6 +170,8 @@ const AyushCardApplicationForm = ({
   const [staffCashCameraLoading, setStaffCashCameraLoading] = useState(false);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
+  const [backOcrLoading, setBackOcrLoading] = useState(false);
+  const [backOcrProgress, setBackOcrProgress] = useState(0);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
@@ -675,8 +683,7 @@ const AyushCardApplicationForm = ({
       // 1. Try OCR directly on the binary blob for best accuracy
       let results = await performOCR(blob, (p) => setOcrProgress(p));
 
-      // 2. Robust fallback: Use filtered version if first pass fails to find document ID
-      if (!results?.docNumber) {
+      if (!results?.canAutofill) {
         try {
           const filteredBase64 = await compressBase64Image(
             base64,
@@ -685,67 +692,37 @@ const AyushCardApplicationForm = ({
             0.9,
             true,
           );
-          const filteredBlob = await fetch(filteredBase64).then(res => res.blob());
-          results = await performOCR(filteredBlob, (p) => setOcrProgress(p));
+          const filteredBlob = await fetch(filteredBase64).then((res) => res.blob());
+          const filteredResults = await performOCR(filteredBlob, (p) => setOcrProgress(p));
+          results = pickBetterFrontOcr(results, filteredResults);
         } catch (e) {}
       }
 
-      // 3. One more fallback: Try the center crop
-      if (!results?.docNumber) {
+      if (!results?.canAutofill) {
         try {
           const croppedBase64 = await preprocessMemberImageForOCR(base64);
-          const croppedBlob = await fetch(croppedBase64).then(res => res.blob());
-          const fallbackResults = await performOCR(croppedBlob, (p) => setOcrProgress(p));
-          if (fallbackResults) {
-             const pass1NameScore = getNameConfidenceScore(results?.name || results?.fullName);
-             const fallbackNameScore = getNameConfidenceScore(fallbackResults.name || fallbackResults.fullName);
-             results = {
-               ...results,
-               name: (fallbackNameScore > pass1NameScore) ? fallbackResults.name : (results?.name || results?.fullName),
-               docNumber: fallbackResults.docNumber || results?.docNumber,
-               dob: results?.dob || fallbackResults.dob,
-               gender: results?.gender || fallbackResults.gender,
-               type: fallbackResults.type !== "unknown" ? fallbackResults.type : results?.type,
-             };
-          }
+          const croppedBlob = await fetch(croppedBase64).then((res) => res.blob());
+          const croppedResults = await performOCR(croppedBlob, (p) => setOcrProgress(p));
+          results = pickBetterFrontOcr(results, croppedResults);
         } catch (e) {}
       }
 
-      if (results) {
-        setFamilyHead((prev) => {
-          const rawNextName = results.name || results.fullName;
-          const nextName = isLikelyMemberName(rawNextName) ? rawNextName : "";
-          const nextAadhaar = (results.type === "aadhaar" || results.type === "vid")
-            ? normalizeDigits(results.docNumber) : "";
+      let storageBase64 = base64;
+      try {
+        storageBase64 = await compressBase64Image(base64, 1200, 1200, 0.7);
+      } catch (e) {}
 
-          const prevScore = getNameConfidenceScore(prev.fullName);
-          const nextScore = getNameConfidenceScore(nextName);
+      setDocFront({
+        name: "captured_id.jpg",
+        size: "Live Capture",
+        url: storageBase64,
+        base64: storageBase64,
+      });
 
-          console.log("Setting Family Head. Prev:", prev, "Next:", { nextName, nextAadhaar, results });
-          return {
-            ...prev,
-            fullName: (nextName && (!prev.fullName || nextScore >= prevScore)) ? nextName : prev.fullName,
-            gender: results.gender || prev.gender,
-            dob: results.dob || prev.dob,
-            pincode: results.pincode || prev.pincode || "",
-            address: results.address || prev.address || "",
-            aadhaarNumber: nextAadhaar || prev.aadhaarNumber,
-          };
-        });
-
-        // ALWAYS compress for storage/request to keep payload small
-        let storageBase64 = base64;
-        try {
-          storageBase64 = await compressBase64Image(base64, 1200, 1200, 0.7);
-        } catch (e) {}
-
-        setDocFront({
-          name: "captured_id.jpg",
-          size: "Live Capture",
-          url: storageBase64,
-          base64: storageBase64,
-        });
-        toastWarn("Details extracted successfully!");
+      if (results && applyFrontOcrToFamilyHead(results)) {
+        if (results.valid) {
+          toastSuccess("Aadhaar details extracted successfully.");
+        }
       }
     } catch (err) {
       console.error("Capture OCR Error:", err);
@@ -791,10 +768,108 @@ const AyushCardApplicationForm = ({
     setDocBackCameraActive(false);
   };
 
+  const applyBackOcrResults = (results) => {
+    if (results?.canAutofill === false) {
+      toastWarn(results?.validationMessage || AADHAAR_OCR_LOW_CONFIDENCE_MSG);
+      return false;
+    }
+    if (!results?.address && !results?.pincode) {
+      toastWarn(AADHAAR_OCR_LOW_CONFIDENCE_MSG);
+      return false;
+    }
+    setFamilyHead((prev) => ({
+      ...prev,
+      ...(results.address ? { address: results.address } : {}),
+      ...(results.pincode ? { pincode: results.pincode } : {}),
+    }));
+    if (!results?.valid) {
+      toastWarn(
+        "Some address details could not be read. Please verify the form or rescan.",
+      );
+    }
+    return true;
+  };
+
+  const processBackOcrFromImage = async (blob, base64, fileMeta = null) => {
+    setBackOcrLoading(true);
+    setBackOcrProgress(0);
+    try {
+      let results = await performAadhaarBackOCR(blob, (p) => setBackOcrProgress(p));
+
+      if (!results?.address && !results?.pincode) {
+        try {
+          const filteredBase64 = await compressBase64Image(
+            base64,
+            1400,
+            1400,
+            0.9,
+            true,
+          );
+          const filteredBlob = await fetch(filteredBase64).then((res) => res.blob());
+          const fallback = await performAadhaarBackOCR(filteredBlob, (p) =>
+            setBackOcrProgress(p),
+          );
+          if (fallback) {
+            results = {
+              address: fallback.address || results?.address || "",
+              pincode: fallback.pincode || results?.pincode || "",
+            };
+          }
+        } catch (e) {
+          /* filtered pass optional */
+        }
+      }
+
+      const filled = applyBackOcrResults(results);
+
+      let storageBase64 = base64;
+      try {
+        storageBase64 = await compressBase64Image(base64, 1200, 1200, 0.7);
+      } catch (e) {
+        /* keep original */
+      }
+
+      const fileData = fileMeta || {
+        name: "captured_back.jpg",
+        size: "Live Capture",
+      };
+
+      setDocBack({
+        ...fileData,
+        url: storageBase64,
+        base64: storageBase64,
+      });
+
+      if (filled && results?.valid) {
+        toastSuccess("Address and pincode extracted from back side.");
+      } else if (filled) {
+        toastWarn(
+          "Address partially filled — please verify pincode and lines.",
+        );
+      } else {
+        toastWarn(
+          results?.validationMessage ||
+            "Back image saved. Could not read address — please rescan or enter manually.",
+        );
+      }
+    } catch (err) {
+      console.error("Back OCR Error:", err);
+      toastWarn("Could not scan back side. Image saved — enter address manually.");
+      setDocBack({
+        name: fileMeta?.name || "captured_back.jpg",
+        size: fileMeta?.size || "Live Capture",
+        url: base64,
+        base64: base64,
+      });
+    } finally {
+      setBackOcrLoading(false);
+      setBackOcrProgress(0);
+    }
+  };
+
   const captureDocBackPhoto = async () => {
     if (!docBackVideoRef.current || !docBackCanvasRef.current) return;
 
-    setDocBackCameraLoading(true);
     const video = docBackVideoRef.current;
     const canvas = docBackCanvasRef.current;
 
@@ -804,28 +879,34 @@ const AyushCardApplicationForm = ({
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     const base64 = canvas.toDataURL("image/jpeg", 0.8);
+    const blob = await new Promise((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", 0.8),
+    );
     stopDocBackCamera();
 
-    try {
-      const compressedBase64 = await compressBase64Image(base64, 1200, 1200, 0.7);
-      setDocBack({
-        name: "captured_back.jpg",
-        size: "Live Capture",
-        url: compressedBase64,
-        base64: compressedBase64,
-      });
-      toastSuccess("Document captured successfully!");
-    } catch (err) {
-      console.error("Doc Back Capture Error:", err);
-      setDocBack({
-        name: "captured_back.jpg",
-        size: "Live Capture",
-        url: base64,
-        base64: base64,
-      });
-    } finally {
-      setDocBackCameraLoading(false);
+    await processBackOcrFromImage(blob, base64);
+  };
+
+  const handleBackScanImage = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toastWarn("Image size should be less than 5MB");
+      e.target.value = "";
+      return;
     }
+
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64 = reader.result;
+      toastWarn("Scanning back side… please wait.");
+      await processBackOcrFromImage(file, base64, {
+        name: file.name,
+        size: (file.size / (1024 * 1024)).toFixed(2) + " MB",
+      });
+      e.target.value = "";
+    };
+    reader.readAsDataURL(file);
   };
 
   const parseAadhaarQR = (text) => {
@@ -897,81 +978,47 @@ const AyushCardApplicationForm = ({
           // 1. Try OCR directly on the binary file
           let results = await performOCR(file, (p) => setOcrProgress(p));
 
-          // 2. Fallback to filtered version if Aadhaar number is missing
-          if (!results?.docNumber) {
-            console.log("First OCR pass missed Aadhaar, trying fallback...");
+          if (!results?.canAutofill) {
             try {
-              const filteredBase64 = await compressBase64Image(base64, 1400, 1400, 0.9, true);
-              const filteredBlob = await fetch(filteredBase64).then(res => res.blob());
-              const fallbackResults = await performOCR(filteredBlob, (p) => setOcrProgress(p));
-              if (fallbackResults) {
-                console.log("Fallback OCR Results found:", fallbackResults);
-                // Smart Merge between Pass 1 and Pass 2
-                const pass1NameScore = getNameConfidenceScore(results?.name || results?.fullName);
-                const fallbackNameScore = getNameConfidenceScore(fallbackResults.name || fallbackResults.fullName);
-
-                results = {
-                  ...results,
-                  // Keep primary name if fallback is worse quality
-                  name: (fallbackNameScore > pass1NameScore) ? fallbackResults.name : (results?.name || results?.fullName),
-                  // Prefer fallback docNumber if primary was empty
-                  docNumber: fallbackResults.docNumber || results?.docNumber,
-                  // Prefer primary DOB if fallback is empty
-                  dob: results?.dob || fallbackResults.dob,
-                  gender: results?.gender || fallbackResults.gender,
-                  type: fallbackResults.type !== "unknown" ? fallbackResults.type : results?.type,
-                };
-              }
+              const filteredBase64 = await compressBase64Image(
+                base64,
+                1400,
+                1400,
+                0.9,
+                true,
+              );
+              const filteredBlob = await fetch(filteredBase64).then((res) => res.blob());
+              const filteredResults = await performOCR(filteredBlob, (p) =>
+                setOcrProgress(p),
+              );
+              results = pickBetterFrontOcr(results, filteredResults);
             } catch (fallbackErr) {
               console.error("Fallback OCR failed:", fallbackErr);
             }
           }
-          if (results) {
-            console.log("Gallery OCR results for Family Head:", results);
-            setFamilyHead((prev) => {
-              const rawNextName = results.name || results.fullName;
-              const nextName = isLikelyMemberName(rawNextName) ? rawNextName : "";
-              const nextAadhaar = (results.type === "aadhaar" || results.type === "vid")
-                ? normalizeDigits(results.docNumber) : "";
+          let compressedBase64 = base64;
+          try {
+            compressedBase64 = await compressBase64Image(
+              base64,
+              1200,
+              1200,
+              0.7,
+            );
+          } catch (err) {
+            console.warn("Compression failed for gallery image", err);
+          }
 
-              const prevScore = getNameConfidenceScore(prev.fullName);
-              const nextScore = getNameConfidenceScore(nextName);
+          setDocFront({
+            name: file.name,
+            size: (file.size / (1024 * 1024)).toFixed(2) + " MB",
+            url: URL.createObjectURL(file),
+            base64: compressedBase64,
+          });
 
-              console.log("Setting Family Head (Gallery). Prev:", prev, "Next:", { nextName, nextAadhaar, results });
-              return {
-                ...prev,
-                fullName: (nextName && (!prev.fullName || nextScore >= prevScore)) ? nextName : prev.fullName,
-                gender: results.gender || prev.gender,
-                dob: results.dob || prev.dob,
-                pincode: results.pincode || prev.pincode || "",
-                address: results.address || prev.address || "",
-                aadhaarNumber: nextAadhaar || prev.aadhaarNumber,
-              };
-            });
-
-            // ALWAYS compress for storage/request
-            let compressedBase64 = base64;
-            try {
-              compressedBase64 = await compressBase64Image(
-                base64,
-                1200,
-                1200,
-                0.7,
-              );
-            } catch (err) {
-              console.warn("Compression failed for gallery image", err);
+          if (results && applyFrontOcrToFamilyHead(results)) {
+            if (results.valid) {
+              toastSuccess("Aadhaar details extracted successfully.");
             }
-
-            setDocFront({
-              name: file.name,
-              size: (file.size / (1024 * 1024)).toFixed(2) + " MB",
-              url: URL.createObjectURL(file),
-              base64: compressedBase64,
-            });
-
-            toastWarn("Details extracted and autofilled!");
-          } else {
-            toastError("Could not extract details. Please enter manually.");
           }
         } catch (err) {
           console.error("OCR failed", err);
@@ -1176,36 +1223,8 @@ const AyushCardApplicationForm = ({
     setMembers(updatedMembers);
   };
 
-  /** 2nd document only — no OCR; stored as `docBack` / aadhaar_back */
-  const handleDocumentUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        toastWarn("Image size should be less than 5MB");
-        e.target.value = "";
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        try {
-          const compressedBase64 = await compressBase64Image(reader.result);
-          const fileData = {
-            name: file.name,
-            size: (file.size / (1024 * 1024)).toFixed(2) + " MB",
-            url: URL.createObjectURL(file),
-            base64: compressedBase64,
-          };
-          setDocBack(fileData);
-        } catch (err) {
-          console.error("Document compression failed", err);
-          toastWarn("Could not process image. Please try another file.");
-        } finally {
-          e.target.value = "";
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
+  /** 2nd document — back-side OCR for address & pincode */
+  const handleDocumentUpload = handleBackScanImage;
 
   const handleHeadImageUpload = (e) => {
     const file = e.target.files[0];
@@ -1435,12 +1454,49 @@ const AyushCardApplicationForm = ({
   };
 
   const normalizeDigits = (s) => String(s || "").replace(/\D/g, "");
-  const isLikelyMemberName = (s) => {
-    const t = String(s || "").trim();
-    const result = t.length >= 3 && t.length <= 80 && !/(Aadhar|Card|India|Govt|Unique)/i.test(t);
-    console.log("DEBUG: isLikelyMemberName for", t, "is", result);
-    return result;
+
+  const pickBetterFrontOcr = (a, b) => {
+    if (!b) return a;
+    if (!a) return b;
+    if (b.valid && !a.valid) return b;
+    if (a.valid && !b.valid) return a;
+    if (b.canAutofill && !a.canAutofill) return b;
+    if (a.canAutofill && !b.canAutofill) return a;
+    return (b.confidence || 0) > (a.confidence || 0) ? b : a;
   };
+
+  const applyFrontOcrToFamilyHead = (results) => {
+    if (!results?.canAutofill) {
+      toastWarn(results?.validationMessage || AADHAAR_OCR_LOW_CONFIDENCE_MSG);
+      return false;
+    }
+
+    const nextAadhaar =
+      results.docNumber?.length === 12
+        ? results.docNumber
+        : normalizeDigits(results.docNumber).length === 12
+          ? normalizeDigits(results.docNumber)
+          : "";
+
+    const nextName = isValidAadhaarName(results.name) ? results.name.trim() : "";
+
+    setFamilyHead((prev) => ({
+      ...prev,
+      fullName: nextName || prev.fullName,
+      gender: results.gender || prev.gender,
+      dob: results.dob || prev.dob,
+      aadhaarNumber: nextAadhaar || prev.aadhaarNumber,
+    }));
+
+    if (!results.valid) {
+      toastWarn(
+        "Some Aadhaar details could not be read. Please verify the form or rescan.",
+      );
+    }
+    return true;
+  };
+
+  const isLikelyMemberName = (s) => isValidAadhaarName(s);
 
   const getNameConfidenceScore = (s) => {
     if (!s) return 0;
@@ -2044,7 +2100,7 @@ const AyushCardApplicationForm = ({
       }
       if (!docBack) {
         toastWarn(
-          "Please upload the second identity document (right column — JPG/PNG).",
+          "Please scan the back of the Aadhaar card (right column — camera or gallery).",
         );
         return;
       }
@@ -2573,7 +2629,7 @@ const AyushCardApplicationForm = ({
             </div>
           </div>
 
-          {/* Hidden File Inputs — 2nd document upload only (no OCR here) */}
+          {/* Hidden File Inputs — 2nd document (back OCR) + head photo */}
           <input
             type="file"
             accept=".jpg,.jpeg,.png"
@@ -2830,7 +2886,7 @@ const AyushCardApplicationForm = ({
                               )}
                             </div>
                             <p className="text-[11px] text-gray-500 text-center mb-3 px-1">
-                              Camera or gallery to scan the front side.
+                              Camera or gallery — name, DOB, gender &amp; Aadhaar no.
                             </p>
                             <div className="flex gap-2 w-full text-[12px] justify-center flex-wrap">
                               <button
@@ -2856,6 +2912,113 @@ const AyushCardApplicationForm = ({
                           accept="image/*"
                           className="hidden"
                           onChange={handleScanImage}
+                        />
+                      </div>
+
+                      {/* 2nd document: back-side OCR — beside front scan */}
+                      <div className="w-full md:flex-1 md:min-w-0 flex flex-col items-center justify-center p-3 sm:p-4 rounded-xl border border-[#fa8112]/30 bg-[#faf3e1] min-h-0">
+                        <h4 className="w-full text-[11px] sm:text-[12px] font-bold text-[#222222] mb-1 text-center">
+                          2nd document — back OCR scan
+                        </h4>
+
+                        {docBackCameraActive ? (
+                          <div className="w-full max-w-sm space-y-2 animate-in fade-in zoom-in-95">
+                            <div className="relative aspect-[4/3] max-h-[200px] sm:max-h-[220px] bg-black rounded-lg overflow-hidden shadow border border-white">
+                              <video
+                                ref={docBackVideoRef}
+                                autoPlay
+                                playsInline
+                                className="w-full h-full object-cover scale-[1.4]"
+                              />
+                              <div className="absolute inset-x-4 top-1/2 -translate-y-1/2 border-2 border-white/50 border-dashed aspect-[1.6/1] rounded-lg pointer-events-none"></div>
+                              {backOcrLoading && (
+                                <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center p-6 transition-all animate-in fade-in">
+                                  <div className="w-full max-w-[160px] h-1.5 bg-white/20 rounded-full overflow-hidden mb-3 relative">
+                                    <div
+                                      className="h-full bg-[#fa8112] transition-all duration-300"
+                                      style={{ width: `${backOcrProgress}%` }}
+                                    ></div>
+                                  </div>
+                                  <p className="text-white text-[12px] font-bold animate-pulse">
+                                    Scanning... {backOcrProgress}%
+                                  </p>
+                                  <div className="absolute left-0 right-0 h-0.5 bg-[#fa8112] shadow-[0_0_10px_#fa8112] blur-[1px] animate-[scan_2s_infinite]"></div>
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={stopDocBackCamera}
+                                className="flex-1 py-2 text-[12px] bg-white border border-gray-200 text-gray-600 rounded-lg font-semibold transition-all"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={captureDocBackPhoto}
+                                disabled={backOcrLoading}
+                                className="flex-[2] py-2 text-[12px] bg-[#fa8112] text-white rounded-lg font-semibold shadow flex items-center justify-center gap-1.5 active:scale-95"
+                              >
+                                {backOcrLoading ? (
+                                  <Loader2 className="animate-spin" size={16} />
+                                ) : (
+                                  <Camera size={16} />
+                                )}
+                                {backOcrLoading ? "Scanning..." : "Capture & Scan"}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center group w-full">
+                            <div
+                              className="w-14 h-14 bg-white rounded-xl flex items-center justify-center shadow mb-3 cursor-pointer hover:scale-105 transition-all border border-orange-100 group-hover:border-[#fa8112]"
+                              onClick={startDocBackCamera}
+                            >
+                              {backOcrLoading ? (
+                                <Loader2
+                                  className="animate-spin text-[#fa8112]"
+                                  size={24}
+                                />
+                              ) : docBack ? (
+                                <Check size={24} className="text-green-600" />
+                              ) : (
+                                <Camera size={24} className="text-[#fa8112]" />
+                              )}
+                            </div>
+                            <p className="text-[11px] text-gray-500 text-center mb-3 px-1">
+                              Camera or gallery to scan the back side (address &amp; pincode).
+                            </p>
+                            <div className="flex gap-2 w-full text-[12px] justify-center flex-wrap">
+                              <button
+                                type="button"
+                                onClick={startDocBackCamera}
+                                className="px-3 py-2 bg-[#fa8112] text-white rounded-lg font-semibold flex items-center justify-center gap-1.5 shadow-sm hover:bg-[#e47510] transition-all"
+                              >
+                                <Camera size={13} /> Camera
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => backOcrFileInputRef.current?.click()}
+                                className="px-3 py-2 bg-white border border-[#fa8112] text-[#fa8112] rounded-lg font-semibold flex items-center justify-center gap-1.5 hover:bg-orange-50 transition-all"
+                              >
+                                <UploadCloud size={13} /> Gallery
+                              </button>
+                            </div>
+                            {docBack && (
+                              <p className="text-[11px] text-green-700 mt-2 text-center truncate max-w-full px-2">
+                                {docBack.name}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                        <canvas ref={docBackCanvasRef} className="hidden" />
+                        <input
+                          ref={backOcrFileInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleBackScanImage}
                         />
                       </div>
                     </div>
@@ -3022,114 +3185,6 @@ const AyushCardApplicationForm = ({
                           style={{ fontFamily: "'Inter', sans-serif" }}
                           className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-[15px] outline-none focus:border-[#FA8112] transition-colors"
                         />
-                        
-                        {/* 2nd document: file upload only — no OCR */}
-                        <div className="mt-4 border-2 border-[#fa8112] bg-[#faf3e1] p-3 sm:p-4 rounded-xl flex flex-col">
-                          <h4 className="font-bold text-[11px] sm:text-[12px] text-[#222222] mb-1 text-center">
-                            2nd document — upload only
-                          </h4>
-
-                          <div className="flex flex-1 flex-col items-center justify-center py-1 min-h-[100px]">
-                            {docBackCameraActive ? (
-                              <div className="w-full max-w-sm space-y-2 animate-in fade-in zoom-in-95">
-                                <div className="relative aspect-[4/3] max-h-[200px] sm:max-h-[220px] bg-black rounded-lg overflow-hidden shadow border border-white">
-                                  <video
-                                    ref={docBackVideoRef}
-                                    autoPlay
-                                    playsInline
-                                    className="w-full h-full object-cover"
-                                  />
-                                  <div className="absolute inset-x-4 top-1/2 -translate-y-1/2 border-2 border-white/50 border-dashed aspect-[1.6/1] rounded-lg"></div>
-                                  {docBackCameraLoading && (
-                                    <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center p-6 transition-all animate-in fade-in">
-                                      <Loader2 className="animate-spin text-white mb-2" size={24} />
-                                      <p className="text-white text-[12px] font-bold animate-pulse">
-                                        Capturing...
-                                      </p>
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="flex gap-2">
-                                  <button
-                                    onClick={stopDocBackCamera}
-                                    className="flex-1 py-2 text-[12px] bg-white border border-gray-200 text-gray-600 rounded-lg font-semibold transition-all"
-                                  >
-                                    Cancel
-                                  </button>
-                                  <button
-                                    onClick={captureDocBackPhoto}
-                                    disabled={docBackCameraLoading}
-                                    className="flex-[2] py-2 text-[12px] bg-[#fa8112] text-white rounded-lg font-semibold shadow flex items-center justify-center gap-1.5 active:scale-95"
-                                  >
-                                    {docBackCameraLoading ? (
-                                      <Loader2 className="animate-spin" size={16} />
-                                    ) : (
-                                      <Camera size={16} />
-                                    )}
-                                    Capture
-                                  </button>
-                                </div>
-                              </div>
-                            ) : docBack ? (
-                              <div className="w-full flex flex-col items-center justify-center py-4 px-4 rounded-lg transition-all shadow-sm bg-white border-2 border-green-500">
-                                <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center text-white mb-3">
-                                  <Check size={20} className="text-white" />
-                                </div>
-                                <span className="text-[14px] font-semibold text-[#222222]">
-                                  2nd document added
-                                </span>
-                                <span className="text-[12px] text-gray-500 truncate w-full px-1 text-center max-w-[200px] mt-1 mb-3">
-                                  {docBack.name}
-                                </span>
-                                <div className="flex gap-2 w-full text-[12px] justify-center flex-wrap">
-                                  <button
-                                    type="button"
-                                    onClick={startDocBackCamera}
-                                    className="px-3 py-2 bg-[#fa8112] text-white rounded-lg font-semibold flex items-center justify-center gap-1.5 shadow-sm hover:bg-[#e47510] transition-all"
-                                  >
-                                    <Camera size={13} /> Camera
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => docBackInputRef.current?.click()}
-                                    className="px-3 py-2 bg-white border border-[#fa8112] text-[#fa8112] rounded-lg font-semibold flex items-center justify-center gap-1.5 hover:bg-orange-50 transition-all"
-                                  >
-                                    <UploadCloud size={13} /> Gallery
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="flex flex-col items-center group w-full">
-                                <div
-                                  className="w-14 h-14 bg-white rounded-xl flex items-center justify-center shadow mb-3 cursor-pointer hover:scale-105 transition-all border border-orange-100 group-hover:border-[#fa8112]"
-                                  onClick={startDocBackCamera}
-                                >
-                                  <Camera size={24} className="text-[#fa8112]" />
-                                </div>
-                                <p className="text-[11px] text-gray-500 text-center mb-3 px-1">
-                                  Camera or gallery to add back side.
-                                </p>
-                                <div className="flex gap-2 w-full text-[12px] justify-center flex-wrap">
-                                  <button
-                                    type="button"
-                                    onClick={startDocBackCamera}
-                                    className="px-3 py-2 bg-[#fa8112] text-white rounded-lg font-semibold flex items-center justify-center gap-1.5 shadow-sm hover:bg-[#e47510] transition-all"
-                                  >
-                                    <Camera size={13} /> Camera
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => docBackInputRef.current?.click()}
-                                    className="px-3 py-2 bg-white border border-[#fa8112] text-[#fa8112] rounded-lg font-semibold flex items-center justify-center gap-1.5 hover:bg-orange-50 transition-all"
-                                  >
-                                    <UploadCloud size={13} /> Gallery
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-                            <canvas ref={docBackCanvasRef} className="hidden" />
-                          </div>
-                        </div>
                       </div>
                     </div>
                   </div>
@@ -3815,7 +3870,7 @@ const AyushCardApplicationForm = ({
                                 1st document (OCR)
                               </p>
                               <p className="text-[12px] text-gray-500">
-                                Scan or gallery — auto-fills form
+                                Name, DOB, gender &amp; Aadhaar only
                               </p>
                             </div>
                           </div>
@@ -3885,10 +3940,10 @@ const AyushCardApplicationForm = ({
                             </div>
                             <div>
                               <p className="text-[14px] font-semibold text-[#222222]">
-                                2nd document (upload)
+                                2nd document (back OCR)
                               </p>
                               <p className="text-[12px] text-gray-500">
-                                JPG/PNG — no OCR
+                                Scan back — fills address &amp; pincode
                               </p>
                             </div>
                           </div>
