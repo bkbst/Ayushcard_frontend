@@ -26,7 +26,7 @@
     "react-toastify": "^11.0.5",
     "recharts": "^3.7.0",
     "tailwindcss": "^4.2.0",
-    "tesseract.js": "^7.0.0",
+    "@paddleocr/paddleocr-js": "^0.3.2",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
