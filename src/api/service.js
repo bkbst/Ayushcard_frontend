@@ -68,6 +68,18 @@ const storage = {
 const getToken = () => storage.get('token');
 const getRefreshToken = () => storage.get('refreshToken');
 
+function throwIfOcrResponseFailed(data) {
+    if (data && data.success === false) {
+        const err = new Error(data.message || 'OCR request failed');
+        err.response = {
+            status: /auth/i.test(String(data.message || '')) ? 401 : 400,
+            data,
+        };
+        throw err;
+    }
+    return data;
+}
+
 // ─── REFRESH TOKEN LOGIC ───────────────────────────────────────────────────
 
 let isRefreshing = false;                // prevent multiple simultaneous refresh calls
@@ -115,14 +127,34 @@ const doRefresh = async () => {
     }
 };
 
+// Default `Content-Type: application/json` prevents multipart file upload from reaching the API.
+function stripJsonContentTypeForFormData(config) {
+    if (config.data instanceof FormData) {
+        const headers = config.headers;
+        if (headers && typeof headers.setContentType === 'function') {
+            headers.setContentType(false);
+        } else if (headers?.delete) {
+            headers.delete('Content-Type');
+        } else if (headers) {
+            delete headers['Content-Type'];
+        }
+    }
+    return config;
+}
+
 // ─── REQUEST INTERCEPTOR ───────────────────────────────────────────────────
 
 api.interceptors.request.use(
     (config) => {
         const token = getToken();
         if (token) config.headers.Authorization = `Bearer ${token}`;
-        return config;
+        return stripJsonContentTypeForFormData(config);
     },
+    (error) => Promise.reject(error)
+);
+
+publicApi.interceptors.request.use(
+    (config) => stripJsonContentTypeForFormData(config),
     (error) => Promise.reject(error)
 );
 
@@ -639,6 +671,78 @@ const apiService = {
     getUserAttendance: async (userId, params = {}) => {
         const response = await api.get(`/api/attendance/users/${userId}`, { params });
         return response.data;
+    },
+
+    // ─── AADHAAR OCR (multipart image upload, auth required on Railway) ─────
+
+    ocrAadhaarFront: async (imageFile) => {
+        const token = getToken();
+        if (!token) {
+            const err = new Error('Authentication required');
+            err.response = {
+                status: 401,
+                data: { success: false, message: 'Authentication required' },
+            };
+            throw err;
+        }
+
+        const file = imageFile instanceof File
+            ? imageFile
+            : new File([imageFile], 'aadhaar_front.jpg', {
+                type: imageFile?.type || 'image/jpeg',
+            });
+
+        if (!file.size) {
+            const err = new Error('Image file is empty');
+            err.response = {
+                status: 400,
+                data: { success: false, message: 'Image is required. Use form field name: image' },
+            };
+            throw err;
+        }
+
+        const formData = new FormData();
+        formData.append('image', file, file.name || 'aadhaar_front.jpg');
+
+        const response = await api.post('/api/ocr/aadhaar/front', formData, {
+            timeout: 120000,
+        });
+        return throwIfOcrResponseFailed(response.data);
+    },
+
+    ocrAadhaarBack: async (imageFile) => {
+        const token = getToken();
+        if (!token) {
+            const err = new Error('Authentication required');
+            err.response = {
+                status: 401,
+                data: { success: false, message: 'Authentication required' },
+            };
+            throw err;
+        }
+
+        const file = imageFile instanceof File
+            ? imageFile
+            : new File([imageFile], 'aadhaar_back.jpg', {
+                type: imageFile?.type || 'image/jpeg',
+            });
+
+        if (!file.size) {
+            const err = new Error('Image file is empty');
+            err.response = {
+                status: 400,
+                data: { success: false, message: 'Image is required. Use form field name: image' },
+            };
+            throw err;
+        }
+
+        const formData = new FormData();
+        formData.append('image', file, file.name || 'aadhaar_back.jpg');
+
+        const response = await api.post('/api/ocr/aadhaar/back', formData, {
+            timeout: 120000,
+        });
+        return throwIfOcrResponseFailed(response.data);
     },
 
     logout: () => {

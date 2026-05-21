@@ -1,14 +1,6 @@
-import {
-  prepareAadhaarCardImage,
-  preprocessImageForFrontOcr,
-} from "./aadhaarOcrImage.js";
-import {
-  recognizeAadhaarImage,
-  majorityPick,
-  preloadAadhaarOcrWorker,
-} from "./paddleOcrEngine.js";
+import { preprocessImageForFrontOcr } from "./aadhaarOcrImage.js";
 
-export { preprocessImageForFrontOcr, preloadAadhaarOcrWorker };
+export { preprocessImageForFrontOcr };
 
 /** Minimum confidence (0–100) to auto-fill any field */
 export const OCR_MIN_AUTOFILL_CONFIDENCE = 58;
@@ -23,8 +15,6 @@ const MIN_REGION_FIELD_CONF = {
   gender: 38,
   aadhaar: 44,
 };
-const FRONT_OCR_REGION_KEYS = ["name", "dobGender", "gender", "aadhaarNumber"];
-
 const SHORT_NAME_ALLOWLIST = new Set([
   "md",
   "sk",
@@ -892,82 +882,82 @@ export function validateAadhaarFrontResults(results) {
 
 /** Front-side only: name, dob, gender, aadhaar number */
 export function parseAadhaarFrontFields(text) {
-  const results = {
-    name: "",
-    dob: "",
-    gender: "",
-    docNumber: "",
+    const results = {
+      name: "",
+      dob: "",
+      gender: "",
+      docNumber: "",
     type: "unknown",
-    email: "",
-    phone: "",
+      email: "",
+      phone: "",
   };
 
   const cleanedText = cleanFrontOcrText(text);
   const lines = splitFrontOcrIntoLines(text);
 
   const upperText = cleanedText.toUpperCase();
-  const vidDetected = /\bVID\b/.test(upperText);
-  const uidDetected =
-    /\bUID\b/.test(upperText) ||
-    upperText.includes("AADHAAR") ||
-    upperText.includes("UNIQUE") ||
-    upperText.includes("UIDAI") ||
-    upperText.includes("GOVERNMENT OF INDIA");
+    const vidDetected = /\bVID\b/.test(upperText);
+    const uidDetected =
+      /\bUID\b/.test(upperText) ||
+      upperText.includes("AADHAAR") ||
+      upperText.includes("UNIQUE") ||
+      upperText.includes("UIDAI") ||
+      upperText.includes("GOVERNMENT OF INDIA");
 
   const aadhaarPattern = /[2-9]{1}\d{3}\s?\d{4}\s?\d{4}/;
   const panPattern = /[A-Z]{5}\d{4}[A-Z]/;
 
-  const isLikelyDocId = (s) => {
-    if (!s) return false;
-    const digits = s.replace(/\D/g, "");
+    const isLikelyDocId = (s) => {
+      if (!s) return false;
+      const digits = s.replace(/\D/g, "");
     return digits.length >= 10 && digits.length <= 12 && digits.length / s.length > 0.6;
-  };
+    };
 
   let aadhaarMatch = cleanedText.match(aadhaarPattern);
-  if (!aadhaarMatch || !isLikelyDocId(aadhaarMatch[0])) {
+    if (!aadhaarMatch || !isLikelyDocId(aadhaarMatch[0])) {
     const allMatches = cleanedText.match(
       /[0-9A-Za-z]{4}[\s\-]+[0-9A-Za-z]{4}[\s\-]+[0-9A-Za-z]{4}/g,
     );
     if (allMatches?.length) {
-      const lastCandidate = allMatches[allMatches.length - 1];
+        const lastCandidate = allMatches[allMatches.length - 1];
       if (isLikelyDocId(lastCandidate)) aadhaarMatch = [lastCandidate];
+      }
     }
-  }
 
-  if (aadhaarMatch) {
+    if (aadhaarMatch) {
     results.type = vidDetected && !uidDetected ? "vid" : "aadhaar";
     results.docNumber = aadhaarMatch[0].replace(/\s+/g, " ").trim();
   } else if (cleanedText.match(panPattern)) {
-    results.type = "pan";
+      results.type = "pan";
     results.docNumber = cleanedText.match(panPattern)[0];
-  } else {
+    } else {
     const relaxedMatches = cleanedText.match(
       /([0-9A-Za-z]{3,4}[\s\-]+[0-9A-Za-z]{3,4}[\s\-]+[0-9A-Za-z]{3,4})/,
     );
-    if (relaxedMatches) {
+      if (relaxedMatches) {
       let potential = relaxedMatches[0]
-        .replace(/[OoQ]/g, "0")
-        .replace(/[Il!|]/g, "1")
-        .replace(/[zZ]/g, "2")
-        .replace(/[S]/g, "5")
-        .replace(/[B]/g, "8")
-        .replace(/\D/g, "");
+          .replace(/[OoQ]/g, "0")
+          .replace(/[Il!|]/g, "1")
+          .replace(/[zZ]/g, "2")
+          .replace(/[S]/g, "5")
+          .replace(/[B]/g, "8")
+          .replace(/\D/g, "");
       if (potential.length === 12) {
         results.type = vidDetected && !uidDetected ? "vid" : "aadhaar";
         results.docNumber = potential;
       }
     }
     if (!results.docNumber) {
-      for (const line of lines) {
-        const cleanedLine = line.replace(/\D/g, "");
-        if (cleanedLine.length >= 10 && cleanedLine.length <= 12 && !line.includes("/")) {
+        for (const line of lines) {
+          const cleanedLine = line.replace(/\D/g, "");
+          if (cleanedLine.length >= 10 && cleanedLine.length <= 12 && !line.includes("/")) {
           results.type = vidDetected && !uidDetected ? "vid" : "aadhaar";
           results.docNumber = line.trim();
-          break;
+            break;
+          }
         }
       }
     }
-  }
 
   const aadhaar12 = (results.docNumber || "").replace(/\D/g, "");
   results.dob = extractDobFromFrontText(cleanedText, aadhaar12);
@@ -1117,238 +1107,6 @@ function parseDobGenderRegionText(text) {
   };
 }
 
-async function ocrRegionBlob(blob, options, onProgress) {
-  if (!blob) return { text: "", confidence: 0 };
-  const { text, confidence } = await recognizeAadhaarImage(blob, {
-    minWordConfidence: options.minWordConfidence ?? 48,
-    onProgress,
-    region: true,
-    detLimitSideLen: options.detLimitSideLen ?? 720,
-  });
-  return { text, confidence };
-}
-
-/** PaddleOCR on each layout region in parallel (primary pass). */
-async function ocrRegionSet(regionBlobs, keys, options, onProgress) {
-  const out = {};
-  await Promise.all(
-    keys.map(async (key) => {
-      const blob = regionBlobs?.[key];
-      out[key] = await ocrRegionBlob(blob, options, (p) => onProgress(p));
-    }),
-  );
-  return out;
-}
-
-function pickMajorityAadhaar(passResults) {
-  const strict = [];
-  const lenient = [];
-  for (const p of passResults) {
-    if (!p?.docNumber) continue;
-    const s = normalizeAadhaarNumber(p.docNumber);
-    const l = normalizeAadhaarNumberLenient(p.docNumber);
-    if (s) strict.push(s);
-    else if (l) lenient.push(l);
-  }
-  return majorityPick(strict, (v) => v) || majorityPick(lenient, (v) => v) || "";
-}
-
-function consolidateFrontFieldVotes(passResults, allText) {
-  const aadhaars = [];
-  const names = [];
-  const dobs = [];
-  const genders = [];
-  let maxOcr = 0;
-  const fieldConfidence = { name: 0, dob: 0, gender: 0, aadhaar: 0 };
-
-  for (const p of passResults) {
-    if (!p) continue;
-    const a =
-      normalizeAadhaarNumber(p.docNumber) ||
-      normalizeAadhaarNumberLenient(p.docNumber);
-    if (a) aadhaars.push(a);
-    if (p.name) names.push(p.name);
-    if (p.dob) dobs.push(p.dob);
-    const g = normalizeGender(p.gender);
-    if (g) genders.push(g);
-    maxOcr = Math.max(maxOcr, p.ocrConfidence || 0);
-    if (p.fieldConfidence) {
-      for (const k of ["name", "dob", "gender", "aadhaar"]) {
-        fieldConfidence[k] = Math.max(fieldConfidence[k], p.fieldConfidence[k] || 0);
-      }
-    }
-  }
-
-  const lines = splitFrontOcrIntoLines(allText);
-  const docNumber =
-    pickMajorityAadhaar(passResults) ||
-    extractAadhaarFromText(allText) ||
-    "";
-  const mergedName = names.reduce((best, n) => pickBetterName(best, n), "");
-  const name =
-    mergedName && scoreAadhaarNameQuality(mergedName) >= MIN_NAME_SCORE
-      ? mergedName
-      : resolveBestFrontName(allText, mergedName);
-  const dob =
-    majorityPick(dobs, (v) => v) ||
-    extractDobFromFrontText(cleanFrontOcrText(allText), docNumber) ||
-    "";
-  const gender =
-    majorityPick(genders, (v) => normalizeGender(v) || "") ||
-    extractGenderFromFrontText(allText, lines) ||
-    "";
-
-  return {
-    name,
-    dob,
-    gender,
-    docNumber,
-    type: docNumber ? "aadhaar" : "unknown",
-    email: "",
-    phone: "",
-    ocrConfidence: maxOcr,
-    fieldConfidence,
-  };
-}
-
-function buildCoherentFrontFromRegions(regionOcr) {
-  const nameOcr = regionOcr.name || { text: "", confidence: 0 };
-  const dobGenderOcr = regionOcr.dobGender || { text: "", confidence: 0 };
-  const genderOcr = regionOcr.gender || { text: "", confidence: 0 };
-  const aadhaarOcr = regionOcr.aadhaarNumber || { text: "", confidence: 0 };
-
-  const personalText = [nameOcr.text, dobGenderOcr.text, genderOcr.text]
-    .filter(Boolean)
-    .join("\n");
-  const rawText = [personalText, aadhaarOcr.text].filter(Boolean).join("\n");
-
-  const lines = splitFrontOcrIntoLines(personalText);
-  const anchors = findAnchorIndices(lines);
-
-  const docNumber =
-    extractAadhaarFromText(aadhaarOcr.text) ||
-    extractAadhaarFromText(rawText) ||
-    "";
-  const aadhaar12 =
-    normalizeAadhaarNumber(docNumber) ||
-    normalizeAadhaarNumberLenient(docNumber) ||
-    "";
-
-  const dob =
-    extractDobFromFrontText(cleanFrontOcrText(dobGenderOcr.text), aadhaar12) ||
-    extractDobFromFrontText(cleanFrontOcrText(personalText), aadhaar12) ||
-    "";
-
-  const genderLines = splitFrontOcrIntoLines(
-    [genderOcr.text, dobGenderOcr.text].filter(Boolean).join("\n"),
-  );
-  const gender =
-    extractGenderFromFrontText(genderOcr.text, splitFrontOcrIntoLines(genderOcr.text)) ||
-    extractGenderFromFrontText(dobGenderOcr.text, splitFrontOcrIntoLines(dobGenderOcr.text)) ||
-    extractGenderFromFrontText(personalText, genderLines) ||
-    "";
-
-  const nameFromRegion = parseNameRegionText(nameOcr.text);
-  const nameFromPersonal = nameFromRegion
-    ? ""
-    : resolveBestFrontName(personalText, "");
-  const nameFromAnchors =
-    nameFromRegion || nameFromPersonal
-      ? ""
-      : extractHolderNameFromText(cleanFrontOcrText(personalText), lines, anchors);
-  const name =
-    nameFromRegion ||
-    pickBetterName(nameFromPersonal, nameFromAnchors) ||
-    "";
-
-  const fieldConfidence = {
-    name: nameOcr.confidence || 0,
-    dob: dobGenderOcr.confidence || 0,
-    gender: Math.max(genderOcr.confidence || 0, dobGenderOcr.confidence || 0),
-    aadhaar: aadhaarOcr.confidence || 0,
-  };
-
-  const confidences = Object.values(fieldConfidence).filter((c) => c > 0);
-  const ocrConfidence = confidences.length
-    ? confidences.reduce((a, b) => a + b, 0) / confidences.length
-    : 0;
-
-  return {
-    parsed: {
-      name,
-      dob,
-      gender,
-      docNumber: aadhaar12 || docNumber,
-      type: aadhaar12 || docNumber ? "aadhaar" : "unknown",
-      email: "",
-      phone: "",
-      ocrConfidence,
-      fieldConfidence,
-    },
-    rawText,
-  };
-}
-
-function parseFrontFromRegionOcr(regionOcr) {
-  return buildCoherentFrontFromRegions(regionOcr);
-}
-
-async function runFrontRegionPipeline(prepared, report, { useAlt = false } = {}) {
-  const regionBlobs = useAlt ? prepared.altRegions : prepared.regions;
-  const tick = (p) => report(8 + Math.floor((useAlt ? 0.32 : 0.38) * p));
-
-  const regionOcr = await ocrRegionSet(
-    regionBlobs,
-    FRONT_OCR_REGION_KEYS,
-    { minWordConfidence: useAlt ? 42 : 46 },
-    tick,
-  );
-
-  return parseFrontFromRegionOcr(regionOcr);
-}
-
-function frontOcrIsSufficient(parsed) {
-  return validateAadhaarFrontResults(parsed).canAutofill;
-}
-
-function mergeFrontOcrResults(a, b) {
-  const va = validateAadhaarFrontResults(a);
-  const vb = validateAadhaarFrontResults(b);
-  const pick = vb.confidence >= va.confidence ? vb : va;
-  const other = vb.confidence >= va.confidence ? va : vb;
-  const otherParsed = vb.confidence >= va.confidence ? a : b;
-
-  const ocrConfidence = Math.max(a.ocrConfidence || 0, b.ocrConfidence || 0);
-  const fieldConfidence = {
-    name: Math.max(a.fieldConfidence?.name || 0, b.fieldConfidence?.name || 0),
-    dob: Math.max(a.fieldConfidence?.dob || 0, b.fieldConfidence?.dob || 0),
-    gender: Math.max(a.fieldConfidence?.gender || 0, b.fieldConfidence?.gender || 0),
-    aadhaar: Math.max(a.fieldConfidence?.aadhaar || 0, b.fieldConfidence?.aadhaar || 0),
-  };
-
-  return {
-    ...otherParsed,
-    name: pickBetterName(a.name, b.name),
-    docNumber:
-      pick.aadhaar ||
-      other.aadhaar ||
-      normalizeAadhaarNumber(otherParsed.docNumber) ||
-      normalizeAadhaarNumberLenient(otherParsed.docNumber) ||
-      "",
-    dob: pick.dob || other.dob || otherParsed.dob,
-    gender: pick.gender || other.gender || otherParsed.gender,
-    type: otherParsed.type !== "unknown" ? otherParsed.type : b.type,
-    ocrConfidence,
-    fieldConfidence,
-  };
-}
-
-function frontOcrNeedsMorePasses(parsed) {
-  if (frontOcrIsSufficient(parsed)) return false;
-  const v = validateAadhaarFrontResults(parsed);
-  return !v.aadhaar || !v.name || !v.dob || !v.gender;
-}
-
 function enrichFrontFromFullText(parsed, rawText) {
   if (!rawText?.trim()) return parsed;
   const fromFull = parseAadhaarFrontFields(rawText);
@@ -1408,108 +1166,6 @@ export function finalizeFrontOcrResult(parsed, rawText = "") {
     validationMessage: validation.validationMessage,
   };
 }
-
-/**
- * Slow accuracy recovery — multi-region Paddle passes (used only when fast scan fails).
- */
-async function performOCRRegionFallback(imageInput, onProgress = () => {}) {
-  const report = (pct) => onProgress(Math.min(99, pct));
-  const rawBlob =
-    imageInput instanceof Blob
-      ? imageInput
-      : await fetch(imageInput).then((r) => r.blob());
-
-  let allText = "";
-  const passResults = [];
-  let prepared = null;
-
-  try {
-    prepared = await prepareAadhaarCardImage(rawBlob, "front");
-    report(5);
-    const primary = await runFrontRegionPipeline(prepared, report, { useAlt: false });
-    allText = primary.rawText;
-    passResults.push(primary.parsed);
-
-    let parsedEarly = consolidateFrontFieldVotes(passResults, allText);
-    if (prepared.altRegions && frontOcrNeedsMorePasses(parsedEarly)) {
-      report(46);
-      const alt = await runFrontRegionPipeline(prepared, report, { useAlt: true });
-      allText += `\n${alt.rawText}`;
-      passResults.push(alt.parsed);
-    }
-  } catch (prepErr) {
-    console.warn("Aadhaar prep failed, raw PaddleOCR fallback:", prepErr);
-    const { text, confidence } = await recognizeAadhaarImage(rawBlob, {
-      minWordConfidence: 45,
-      onProgress: (p) => report(10 + Math.floor(p * 0.85)),
-    });
-    allText = text;
-    passResults.push({ ...parseAadhaarFrontFields(text), ocrConfidence: confidence });
-  }
-
-  let parsed = consolidateFrontFieldVotes(passResults, allText);
-
-  if ((!allText.trim() || frontOcrNeedsMorePasses(parsed)) && prepared?.baseBlob) {
-    const { text, confidence } = await recognizeAadhaarImage(prepared.baseBlob, {
-      minWordConfidence: 42,
-      onProgress: (p) => report(88 + Math.floor(p * 0.1)),
-    });
-    allText += `\n${text}`;
-    passResults.push({ ...parseAadhaarFrontFields(text), ocrConfidence: confidence });
-    parsed = consolidateFrontFieldVotes(passResults, allText);
-  }
-
-  const aadhaarFromText = extractAadhaarFromText(allText);
-  if (aadhaarFromText) {
-    parsed.docNumber = aadhaarFromText;
-    parsed.type = "aadhaar";
-  }
-  parsed.name = resolveBestFrontName(allText, parsed.name);
-
-  onProgress(100);
-  return finalizeFrontOcrResult(parsed, allText);
-}
-
-/**
- * Front-side Aadhaar OCR — fast path (QR + single Paddle pass), region fallback if needed.
- */
-export const performOCR = async (imageInput, onProgress = () => {}, options = {}) => {
-  try {
-    const { scanAadhaarFrontDocument } = await import("./paddleOcr.js");
-    const wrapProgress = (pct, label) => {
-      if (typeof pct === "object" && pct != null) {
-        onProgress(pct.percent, pct.label);
-      } else {
-        onProgress(pct, label);
-      }
-    };
-
-    const fast = await scanAadhaarFrontDocument(imageInput, {
-      onProgress: wrapProgress,
-      preprocessed: Boolean(options.preprocessed),
-      cropToScanFrame: Boolean(options.cropToScanFrame),
-      skipCache: Boolean(options.skipCache),
-    });
-
-    if (fast.canAutofill) {
-      return fast;
-    }
-
-    const { scanAadhaarFrontDocumentEnhanced } = await import("./paddleOcr.js");
-    const enhanced = await scanAadhaarFrontDocumentEnhanced(imageInput, {
-      onProgress: wrapProgress,
-    });
-    if (enhanced.canAutofill) {
-      return enhanced;
-    }
-
-    console.warn("Fast OCR insufficient — running region pipeline fallback");
-    return await performOCRRegionFallback(imageInput, onProgress);
-  } catch (error) {
-    console.error("OCR Error:", error);
-    throw error;
-  }
-};
 
 const BACK_ADDRESS_NOISE =
   /\b(uidai|unique|identification|authority|government|india|help|www|download|aadhaar|enrolment|enrollment|vid|virtual|scan|qr|code|1947|customer|care|soc|bra|ese|peeasi)\b/i;
@@ -1634,9 +1290,9 @@ function cleanAddressFragment(s) {
   return String(s || "")
     .replace(/[|=+\-_/\\]+/g, " ")
     .replace(/\b(oR|SEE|eon|rey|Songs|PEEAsi|es|BRA|Rho|SESE|ER|wh|ke|GE|ST|My|Ir|nr)\b/gi, "")
-    .replace(/\s{2,}/g, " ")
+          .replace(/\s{2,}/g, " ")
     .replace(/^[,.:\s-]+|[,.:\s-]+$/g, "")
-    .trim();
+          .trim();
 }
 
 function scoreAddressLine(line) {
@@ -1854,8 +1510,8 @@ export function extractAadhaarBackFromOcrLines(lines = []) {
     const pinTail = t.match(/^(.*?)[,\s-]+(\d{6})\s*$/);
     if (pinTail && pinTail[1].length >= 4) {
       parts.push(cleanAddressFragment(pinTail[1]));
-      break;
-    }
+            break;
+          }
 
     t = t.replace(/\b\d{6}\b.*$/, "").trim();
     const score = scoreAddressLine(t || texts[i]);
@@ -1926,59 +1582,6 @@ export function finalizeBackOcrResult(fields) {
   };
 }
 
-function parseBackFromRegionOcr(regionOcr) {
-  const addrOcr = regionOcr.address || { text: "", confidence: 0 };
-  const pinOcr = regionOcr.pincode || { text: "", confidence: 0 };
-  const combined = `${addrOcr.text}\n${pinOcr.text}`;
-  const fields = extractAadhaarBackFields(combined);
-  fields.ocrConfidence = (addrOcr.confidence + pinOcr.confidence) / 2;
-  return { fields, text: combined };
-}
-
-async function runBackRegionPipeline(prepared, report, { useAlt = false } = {}) {
-  const regionBlobs = useAlt ? prepared.altRegions : prepared.regions;
-  const tick = (p) => report(8 + Math.floor((useAlt ? 0.35 : 0.5) * p));
-
-  const regionOcr = await ocrRegionSet(
-    regionBlobs,
-    ["address", "pincode"],
-    { minWordConfidence: useAlt ? 38 : 42 },
-    tick,
-  );
-
-  return parseBackFromRegionOcr(regionOcr);
-}
-
-function backOcrIsSufficient(fields) {
-  return validateAadhaarBackResults(fields).canAutofill;
-}
-
-function consolidateBackFieldVotes(fieldPasses, allText) {
-  const pins = [];
-  const addresses = [];
-  let maxOcr = 0;
-
-  for (const f of fieldPasses) {
-    if (!f) continue;
-    if (f.pincode && /^\d{6}$/.test(f.pincode)) pins.push(f.pincode);
-    if (f.address && f.address.length >= 8) addresses.push(f.address);
-    maxOcr = Math.max(maxOcr, f.ocrConfidence || 0);
-  }
-
-  const fromText = extractAadhaarBackFields(allText);
-  const pincode = majorityPick(pins, (v) => v) || fromText.pincode || "";
-  const address =
-    addresses.sort((a, b) => b.length - a.length)[0] ||
-    fromText.address ||
-    "";
-
-  return {
-    address,
-    pincode,
-    ocrConfidence: maxOcr,
-  };
-}
-
 export function validateAadhaarBackResults(results) {
   const pin = /^\d{6}$/.test(results?.pincode || "") ? results.pincode : "";
   const address = String(results?.address || "").trim();
@@ -2003,113 +1606,3 @@ export function validateAadhaarBackResults(results) {
     validationMessage: canAutofill ? "" : AADHAAR_OCR_LOW_CONFIDENCE_MSG,
   };
 }
-
-/** Merge two OCR passes — keep the result with more address signal */
-function mergeBackOcrTexts(primary, secondary) {
-  if (!secondary?.trim()) return primary;
-  if (!primary?.trim()) return secondary;
-  const score = (t) => {
-    let s = 0;
-    if (/\bCOLONY\b/i.test(t)) s += 3;
-    if (/\bPHASE\b/i.test(t)) s += 2;
-    if (/\bAya\b/i.test(t)) s += 2;
-    if (/\bDelhi\b/i.test(t)) s += 2;
-    if (/\b\d{6}\b/.test(t)) s += 3;
-    return s;
-  };
-  return score(secondary) > score(primary) ? `${primary}\n${secondary}` : `${primary}\n${secondary}`;
-}
-
-/** Slow back OCR — region crops (fallback when fast full-page scan is insufficient). */
-async function performAadhaarBackRegionFallback(imageInput, onProgress = () => {}) {
-  const report = (pct) => onProgress(Math.min(99, pct));
-  const rawBlob =
-    imageInput instanceof Blob
-      ? imageInput
-      : await fetch(imageInput).then((r) => r.blob());
-
-  let text = "";
-  const fieldPasses = [];
-
-  try {
-    const prepared = await prepareAadhaarCardImage(rawBlob, "back");
-    report(5);
-
-    const primary = await runBackRegionPipeline(prepared, report, { useAlt: false });
-    text = primary.text;
-    fieldPasses.push(primary.fields);
-
-    if (!backOcrIsSufficient(consolidateBackFieldVotes(fieldPasses, text)) && prepared.altRegions) {
-      report(50);
-      const alt = await runBackRegionPipeline(prepared, report, { useAlt: true });
-      text = mergeBackOcrTexts(text, alt.text);
-      fieldPasses.push(alt.fields);
-    }
-
-    if (!backOcrIsSufficient(consolidateBackFieldVotes(fieldPasses, text)) && prepared.baseBlob) {
-      report(72);
-      const { text: fullText, confidence, lines } = await recognizeAadhaarImage(prepared.baseBlob, {
-        minWordConfidence: 38,
-        detLimitSideLen: 1280,
-        onProgress: (p) => report(72 + Math.floor(p * 0.22)),
-      });
-      text = mergeBackOcrTexts(text, fullText);
-      const fromLines = extractAadhaarBackFromOcrLines(lines);
-      const fromText = extractAadhaarBackFields(fullText);
-      fieldPasses.push({
-        address: fromLines.address || fromText.address,
-        pincode: fromLines.pincode || fromText.pincode,
-        ocrConfidence: confidence,
-      });
-    }
-  } catch (prepErr) {
-    console.warn("Back prep failed, raw PaddleOCR fallback:", prepErr);
-    const { text: rawText, confidence, lines } = await recognizeAadhaarImage(rawBlob, {
-      minWordConfidence: 40,
-      detLimitSideLen: 1280,
-      onProgress: (p) => report(10 + Math.floor(p * 0.85)),
-    });
-    text = rawText;
-    const fromLines = extractAadhaarBackFromOcrLines(lines);
-    const fromText = extractAadhaarBackFields(rawText);
-    fieldPasses.push({
-      address: fromLines.address || fromText.address,
-      pincode: fromLines.pincode || fromText.pincode,
-      ocrConfidence: confidence,
-    });
-  }
-
-  const fields = consolidateBackFieldVotes(fieldPasses, text);
-  return finalizeBackOcrResult(fields);
-}
-
-/** Back-side Aadhaar OCR — fast full-page scan first, region pipeline as fallback. */
-export const performAadhaarBackOCR = async (imageInput, onProgress = () => {}, options = {}) => {
-  try {
-    const { scanAadhaarBackDocument } = await import("./paddleOcr.js");
-    const fast = await scanAadhaarBackDocument(imageInput, {
-      onProgress,
-      preprocessed: Boolean(options.preprocessed),
-      cropToScanFrame: Boolean(options.cropToScanFrame),
-    });
-
-    if (backOcrIsSufficient(fast)) {
-      return fast;
-    }
-
-    const { scanAadhaarBackDocumentEnhanced } = await import("./paddleOcr.js");
-    const enhanced = await scanAadhaarBackDocumentEnhanced(imageInput, {
-      onProgress,
-      preprocessed: Boolean(options.preprocessed),
-    });
-    if (backOcrIsSufficient(enhanced)) {
-      return enhanced;
-    }
-
-    console.warn("Fast back OCR insufficient — running region pipeline fallback");
-    return await performAadhaarBackRegionFallback(imageInput, onProgress);
-  } catch (error) {
-    console.error("Aadhaar Back OCR Error:", error);
-    throw error;
-  }
-};

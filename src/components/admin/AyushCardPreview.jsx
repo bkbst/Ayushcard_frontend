@@ -105,7 +105,7 @@ const AyushCardPreview = ({ data, side = "front", onFlip, exportMode = false }) 
 
                   let baseUrl = import.meta.env.VITE_API_BASE_URL || "";
                   if (!baseUrl && window.location.hostname === "localhost") {
-                    baseUrl = "https://bkbs-backend.vercel.app";
+                    baseUrl = "https://bkbsbackend-production.up.railway.app";
                   }
 
                   const fileBase = baseUrl.replace(/\/api$/, "");

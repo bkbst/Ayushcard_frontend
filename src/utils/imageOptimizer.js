@@ -1,5 +1,5 @@
 /**
- * Resize / compress images before OCR so Paddle runs on ~1–2MP JPEGs, not 4–12MP camera frames.
+ * Resize / compress images before server OCR (~1–2MP JPEGs, not 4–12MP camera frames).
  */
 
 const DEFAULT_MAX_WIDTH = 1200;

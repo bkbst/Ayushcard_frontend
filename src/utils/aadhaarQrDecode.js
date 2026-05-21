@@ -1,5 +1,5 @@
 /**
- * Try Aadhaar QR first (fast path) — skips PaddleOCR when QR decodes cleanly.
+ * Try Aadhaar QR first (fast path) — skips OCR when QR decodes cleanly.
  */
 
 function parsePrintLetterBarcodeXml(xml) {
@@ -54,8 +54,57 @@ export function parseAadhaarQrPayload(raw) {
   return { fullName, dob, gender, aadhaarNumber };
 }
 
+function loadImageElement(source) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    let objectUrl = "";
+    const cleanup = () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+    img.onload = () => {
+      cleanup();
+      resolve(img);
+    };
+    img.onerror = () => {
+      cleanup();
+      reject(new Error("Failed to load image for QR scan."));
+    };
+    if (typeof source === "string") {
+      img.src = source;
+    } else if (source instanceof Blob) {
+      objectUrl = URL.createObjectURL(source);
+      img.src = objectUrl;
+    } else {
+      reject(new Error("Unsupported image source for QR scan."));
+    }
+  });
+}
+
+/** BarcodeDetector needs HTMLCanvasElement — convert Blob / data URL / canvas. */
+async function toQrDetectCanvas(imageSource) {
+  if (imageSource instanceof HTMLCanvasElement) {
+    return imageSource;
+  }
+  if (typeof ImageBitmap !== "undefined" && imageSource instanceof ImageBitmap) {
+    const canvas = document.createElement("canvas");
+    canvas.width = imageSource.width;
+    canvas.height = imageSource.height;
+    canvas.getContext("2d").drawImage(imageSource, 0, 0);
+    return canvas;
+  }
+  const img = await loadImageElement(imageSource);
+  const canvas = document.createElement("canvas");
+  canvas.width = img.naturalWidth || img.width;
+  canvas.height = img.naturalHeight || img.height;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0);
+  return canvas;
+}
+
 /**
- * @param {HTMLCanvasElement|ImageBitmap} imageSource
+ * @param {HTMLCanvasElement|Blob|string} imageSource
  * @returns {Promise<ReturnType<parseAadhaarQrPayload>>}
  */
 export async function tryDecodeAadhaarQr(imageSource) {
@@ -63,13 +112,16 @@ export async function tryDecodeAadhaarQr(imageSource) {
 
   try {
     const detector = new BarcodeDetector({ formats: ["qr_code"] });
-    const codes = await detector.detect(imageSource);
+    const canvas = await toQrDetectCanvas(imageSource);
+    const codes = await detector.detect(canvas);
     for (const code of codes) {
       const parsed = parseAadhaarQrPayload(code.rawValue);
       if (parsed) return parsed;
     }
   } catch (err) {
-    console.warn("QR scan skipped:", err?.message || err);
+    if (import.meta.env.DEV) {
+      console.warn("QR scan skipped:", err?.message || err);
+    }
   }
   return null;
 }

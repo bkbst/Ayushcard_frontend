@@ -3,11 +3,16 @@ import HeadDuplicateHint from "./components/HeadDuplicateHint.jsx";
 import { useToast } from "../../ui/Toast";
 import apiService from "../../../api/service";
 import {
-  performOCR,
-  performAadhaarBackOCR,
   AADHAAR_OCR_LOW_CONFIDENCE_MSG,
   isValidAadhaarName,
 } from "../../../utils/ocr";
+import {
+  mapFrontOcrApiResponse,
+  mapBackOcrApiResponse,
+  getOcrApiErrorMessage,
+  isOcrApiUnavailableError,
+  startOcrProgressTicker,
+} from "../../../utils/aadhaarOcrApi";
 import {
   assessCaptureQuality,
   enhanceImageBlobForOcr,
@@ -16,7 +21,6 @@ import {
   captureVideoScanFrame,
   optimizeImageForOcr,
 } from "../../../utils/imageOptimizer";
-import { preloadPaddleOcr } from "../../../utils/paddleOcr";
 import { load } from "@cashfreepayments/cashfree-js";
 import { useAttendance } from "../../../context/AttendanceContext";
 import { compressBase64Image } from "./compressBase64Image.js";
@@ -93,6 +97,8 @@ export function useAyushCardApplicationForm({
   const [ocrProgress, setOcrProgress] = useState(0);
   const [backOcrLoading, setBackOcrLoading] = useState(false);
   const [backOcrProgress, setBackOcrProgress] = useState(0);
+  const [ocrStatusMessage, setOcrStatusMessage] = useState("");
+  const [backOcrStatusMessage, setBackOcrStatusMessage] = useState("");
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
@@ -575,19 +581,12 @@ export function useAyushCardApplicationForm({
     };
   }, []);
 
-  useEffect(() => {
-    if (currentStep === 1) {
-      preloadPaddleOcr().catch(() => {});
-    }
-  }, [currentStep]);
-
   const startCamera = async () => {
-    preloadPaddleOcr().catch(() => {});
+    stopAadhaarBackCamera();
     try {
-      setOcrLoading(true);
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: "environment",
+          facingMode: { ideal: "environment" },
           width: { ideal: 1280 },
           height: { ideal: 720 },
         },
@@ -597,8 +596,6 @@ export function useAyushCardApplicationForm({
     } catch (err) {
       console.error("Camera error:", err);
       toastWarn("Could not access camera. Please use Gallery Upload.");
-    } finally {
-      setOcrLoading(false);
     }
   };
 
@@ -651,9 +648,7 @@ export function useAyushCardApplicationForm({
     stopCamera();
 
     try {
-      const results = await performOCR(blob, (p) => setOcrProgress(p), {
-        preprocessed: true,
-      });
+      const results = await runFrontOcrForImage(blob, (p) => setOcrProgress(p));
 
       let storageBase64 = base64;
       try {
@@ -682,6 +677,7 @@ export function useAyushCardApplicationForm({
     } finally {
       setOcrLoading(false);
       setOcrProgress(0);
+      setOcrStatusMessage("");
     }
   };
 
@@ -695,11 +691,11 @@ export function useAyushCardApplicationForm({
   };
 
   const startAadhaarBackCamera = async () => {
-    preloadPaddleOcr().catch(() => {});
+    stopCamera();
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: "environment",
+          facingMode: { ideal: "environment" },
           width: { ideal: 1280 },
           height: { ideal: 720 },
         },
@@ -712,12 +708,61 @@ export function useAyushCardApplicationForm({
     }
   };
 
+  const toOcrFile = (blob, defaultName = "aadhaar.jpg") => {
+    if (blob instanceof File) return blob;
+    return new File([blob], defaultName, {
+      type: blob?.type || "image/jpeg",
+    });
+  };
+
+  const runFrontOcrForImage = async (blob, onProgress) => {
+    const file = toOcrFile(blob, "aadhaar_front.jpg");
+    setOcrStatusMessage("Reading Aadhaar on server…");
+    onProgress(10);
+    const ticker = startOcrProgressTicker(onProgress, 10, 72);
+    try {
+      const raw = await apiService.ocrAadhaarFront(file);
+      clearInterval(ticker);
+      setOcrStatusMessage("");
+      onProgress(92);
+      return mapFrontOcrApiResponse(raw);
+    } catch (apiErr) {
+      clearInterval(ticker);
+      setOcrStatusMessage("");
+      if (!isOcrApiUnavailableError(apiErr)) {
+        toastWarn(getOcrApiErrorMessage(apiErr));
+      }
+      throw apiErr;
+    }
+  };
+
+  const runBackOcrForImage = async (blob, onProgress) => {
+    const file = toOcrFile(blob, "aadhaar_back.jpg");
+    setBackOcrStatusMessage("Reading address on server…");
+    onProgress(10);
+    const ticker = startOcrProgressTicker(onProgress, 10, 72);
+    try {
+      const raw = await apiService.ocrAadhaarBack(file);
+      clearInterval(ticker);
+      setBackOcrStatusMessage("");
+      onProgress(92);
+      return mapBackOcrApiResponse(raw);
+    } catch (apiErr) {
+      clearInterval(ticker);
+      setBackOcrStatusMessage("");
+      if (!isOcrApiUnavailableError(apiErr)) {
+        toastWarn(getOcrApiErrorMessage(apiErr));
+      }
+      throw apiErr;
+    }
+  };
+
   const applyAadhaarBackOcrResults = (results) => {
     if (!results?.address && !results?.pincode) {
       toastWarn(results?.validationMessage || AADHAAR_OCR_LOW_CONFIDENCE_MSG);
       return false;
     }
-    if (results?.canAutofill === false) {
+    if (results?.source !== "api" && results?.canAutofill === false) {
       toastWarn(results?.validationMessage || AADHAAR_OCR_LOW_CONFIDENCE_MSG);
       return false;
     }
@@ -728,7 +773,8 @@ export function useAyushCardApplicationForm({
     }));
     if (!results?.valid) {
       toastWarn(
-        "Some address details could not be read. Please verify the form or rescan.",
+        results?.validationMessage ||
+          "Some address details could not be read. Please verify the form or rescan.",
       );
     }
     return true;
@@ -757,10 +803,8 @@ export function useAyushCardApplicationForm({
           /* use original file */
         }
       }
-      const results = await performAadhaarBackOCR(
-        ocrBlob,
-        (p) => setBackOcrProgress(p),
-        ocrOptions,
+      const results = await runBackOcrForImage(ocrBlob, (p) =>
+        setBackOcrProgress(p),
       );
       const filled = applyAadhaarBackOcrResults(results);
 
@@ -799,6 +843,7 @@ export function useAyushCardApplicationForm({
     } finally {
       setBackOcrLoading(false);
       setBackOcrProgress(0);
+      setBackOcrStatusMessage("");
     }
   };
 
@@ -1003,9 +1048,9 @@ export function useAyushCardApplicationForm({
             /* use original file */
           }
 
-          const results = await performOCR(ocrBlob, (p) => setOcrProgress(p), {
-            preprocessed: true,
-          });
+          const results = await runFrontOcrForImage(ocrBlob, (p) =>
+            setOcrProgress(p),
+          );
 
           let compressedBase64 = base64;
           try {
@@ -1516,10 +1561,36 @@ export function useAyushCardApplicationForm({
           ? normalizeDigits(results.docNumber)
           : "";
 
-    const nextName = isValidAadhaarName(results.name) ? results.name.trim() : "";
+    const nextName =
+      results.source === "api"
+        ? String(results.name || "").trim()
+        : isValidAadhaarName(results.name)
+          ? results.name.trim()
+          : "";
 
     const nextGender = results.gender || "";
     const nextDob = results.dob || "";
+
+    if (results.source === "api") {
+      if (!nextAadhaar && !nextName) {
+        toastWarn(results.validationMessage || AADHAAR_OCR_LOW_CONFIDENCE_MSG);
+        return false;
+      }
+      setFamilyHead((prev) => ({
+        ...prev,
+        ...(nextName ? { fullName: nextName } : {}),
+        ...(nextGender ? { gender: nextGender } : {}),
+        ...(nextDob ? { dob: nextDob } : {}),
+        ...(nextAadhaar ? { aadhaarNumber: nextAadhaar } : {}),
+      }));
+      if (!results.canAutofill) {
+        toastWarn(
+          results.validationMessage ||
+            "Some Aadhaar details could not be read. Please verify or complete manually.",
+        );
+      }
+      return true;
+    }
 
     if (
       !results.canAutofill ||
@@ -1627,8 +1698,9 @@ export function useAyushCardApplicationForm({
     setMemberScanProgress(0);
     try {
       // 1. Try OCR directly on the binary blob
-      const optimalBlob = binaryBlob || await fetch(base64Src).then(res => res.blob());
-      let details = await performOCR(optimalBlob, (p) =>
+      const optimalBlob =
+        binaryBlob || (await fetch(base64Src).then((res) => res.blob()));
+      let details = await runFrontOcrForImage(optimalBlob, (p) =>
         setMemberScanProgress(p),
       );
 
@@ -1639,7 +1711,7 @@ export function useAyushCardApplicationForm({
         const processedBlob = await fetch(processedBase64).then((res) =>
           res.blob(),
         );
-        const details2 = await performOCR(processedBlob, (p) =>
+        const details2 = await runFrontOcrForImage(processedBlob, (p) =>
           setMemberScanProgress(p),
         );
         if (
@@ -2358,7 +2430,8 @@ export function useAyushCardApplicationForm({
     orderId, setOrderId, txnId, setTxnId, saveError, setSaveError,
     staffPaymentMode, setStaffPaymentMode, staffCashReceiptImage, setStaffCashReceiptImage,
     staffCashVideoRef, staffCashCanvasRef, staffCashCameraActive, staffCashCameraLoading,
-    ocrLoading, ocrProgress, backOcrLoading, backOcrProgress, videoRef, canvasRef,
+    ocrLoading, ocrProgress, ocrStatusMessage, backOcrLoading, backOcrProgress, backOcrStatusMessage,
+    videoRef, canvasRef,
     cameraActive, aadhaarBackVideoRef, aadhaarBackCanvasRef, aadhaarBackCameraActive,
     docBackVideoRef, docBackCanvasRef, docBackCameraActive, docBackCameraLoading,
     headImage, setHeadImage, headCameraActive, headCameraPermissionDenied,

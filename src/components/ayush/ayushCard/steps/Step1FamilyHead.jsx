@@ -1,5 +1,6 @@
 import { User, UploadCloud, Check, Camera, Loader2, X as CloseIcon, Plus, ArrowLeft, ArrowRight, Banknote, CheckCircle2, ScanLine, FileText, ImageIcon, Calendar, RefreshCw } from "lucide-react";
 import { useAyushCardForm } from "../AyushCardFormContext.jsx";
+import AadhaarScanOverlay, { AadhaarCameraFrame } from "../components/AadhaarScanOverlay.jsx";
 
 export default function Step1FamilyHead() {
   const form = useAyushCardForm();
@@ -7,7 +8,7 @@ export default function Step1FamilyHead() {
 }
 
 function Step1FamilyHeadView(form) {
-  const { variant, isOpen, onClose, skipPayment, staffPaymentFlow, onStaffSubmit, onBack, currentStep, setCurrentStep, applicationId, setApplicationId, submissionReceipt, setSubmissionReceipt, toastWarn, toastError, toastSuccess, todayCampId, todayCampName, submitting, setSubmitting, docFront, setDocFront, docBack, setDocBack, docAadhaarBack, setDocAadhaarBack, ocrFileInputRef, aadhaarBackOcrInputRef, docBackInputRef, docBackCameraInputRef, headImageInputRef, headCameraVideoRef, headCameraCanvasRef, paymentInputRef, maxDobForAdult, paymentScreenshot, setPaymentScreenshot, isEditingReview, setIsEditingReview, declarationAccepted, setDeclarationAccepted, paymentMethod, setPaymentMethod, onlinePaymentLoading, setOnlinePaymentLoading, verifyLoading, setVerifyLoading, orderId, setOrderId, txnId, setTxnId, saveError, setSaveError, staffPaymentMode, setStaffPaymentMode, staffCashReceiptImage, setStaffCashReceiptImage, staffCashVideoRef, staffCashCanvasRef, staffCashCameraActive, staffCashCameraLoading, ocrLoading, ocrProgress, backOcrLoading, backOcrProgress, videoRef, canvasRef, cameraActive, aadhaarBackVideoRef, aadhaarBackCanvasRef, aadhaarBackCameraActive, docBackVideoRef, docBackCanvasRef, docBackCameraActive, docBackCameraLoading, headImage, setHeadImage, headCameraActive, headCameraPermissionDenied, familyHead, setFamilyHead, headPhoneDuplicate, headAadhaarDuplicate, headNameDuplicate, members, setMembers, activeMemberTab, setActiveMemberTab, memberScanningIndex, memberScanProgress, memberOcrLoading, memberVideoRef, memberCanvasRef, memberCameraActive, memberInputRef, addMemberScrollAnchorRef, successStep, totalMembersCount, estimatedFee, extraMembersBeyondIncluded, stepperSteps, stepperProgressPct, footerStepMax, stopStaffCashCamera, handleRawBtPrint, resetForm, handleStaffChooseOfflineCash, handleStaffChooseOnline, handleAadhaarBackScanImage, handleScanImage, handleHeadChange, handleMemberChange, handleDocumentUpload, handleHeadImageUpload, handlePaymentScreenshotUpload, handleMemberScanImage, submitFinalApplication, buildStaffHealthCardPayload, submitStaffApplication, handleInitiateCashfreePayment, handleVerifyCashfreePayment, handleNext, handleBack, cardPreviewData, renderHeadDuplicateHint, thermalPaymentLabel, thermalPaymentRef, hasPrintableReceipt, captureHeadPhoto, stopHeadCamera, startHeadCamera, startCamera, stopCamera, capturePhoto, startAadhaarBackCamera, stopAadhaarBackCamera, captureAadhaarBackPhoto, startDocBackCamera, stopDocBackCamera, captureDocBackPhoto, addMember, removeMember, startMemberCamera, stopMemberCamera, captureMemberPhoto, captureStaffCashReceipt, setHeadCameraActive, setHeadCameraPermissionDenied, setMemberScanningIndex, setMemberScanProgress, setMemberOcrLoading, setMemberCameraActive, setStaffCashCameraLoading, setOcrLoading, setOcrProgress, setBackOcrLoading, setBackOcrProgress, setCameraActive, setAadhaarBackCameraActive, setDocBackCameraLoading, setDocBackCameraActive } = form;
+  const { variant, isOpen, onClose, skipPayment, staffPaymentFlow, onStaffSubmit, onBack, currentStep, setCurrentStep, applicationId, setApplicationId, submissionReceipt, setSubmissionReceipt, toastWarn, toastError, toastSuccess, todayCampId, todayCampName, submitting, setSubmitting, docFront, setDocFront, docBack, setDocBack, docAadhaarBack, setDocAadhaarBack, ocrFileInputRef, aadhaarBackOcrInputRef, docBackInputRef, docBackCameraInputRef, headImageInputRef, headCameraVideoRef, headCameraCanvasRef, paymentInputRef, maxDobForAdult, paymentScreenshot, setPaymentScreenshot, isEditingReview, setIsEditingReview, declarationAccepted, setDeclarationAccepted, paymentMethod, setPaymentMethod, onlinePaymentLoading, setOnlinePaymentLoading, verifyLoading, setVerifyLoading, orderId, setOrderId, txnId, setTxnId, saveError, setSaveError, staffPaymentMode, setStaffPaymentMode, staffCashReceiptImage, setStaffCashReceiptImage, staffCashVideoRef, staffCashCanvasRef, staffCashCameraActive, staffCashCameraLoading, ocrLoading, ocrProgress, ocrStatusMessage, backOcrLoading, backOcrProgress, backOcrStatusMessage, videoRef, canvasRef, cameraActive, aadhaarBackVideoRef, aadhaarBackCanvasRef, aadhaarBackCameraActive, docBackVideoRef, docBackCanvasRef, docBackCameraActive, docBackCameraLoading, headImage, setHeadImage, headCameraActive, headCameraPermissionDenied, familyHead, setFamilyHead, headPhoneDuplicate, headAadhaarDuplicate, headNameDuplicate, members, setMembers, activeMemberTab, setActiveMemberTab, memberScanningIndex, memberScanProgress, memberOcrLoading, memberVideoRef, memberCanvasRef, memberCameraActive, memberInputRef, addMemberScrollAnchorRef, successStep, totalMembersCount, estimatedFee, extraMembersBeyondIncluded, stepperSteps, stepperProgressPct, footerStepMax, stopStaffCashCamera, handleRawBtPrint, resetForm, handleStaffChooseOfflineCash, handleStaffChooseOnline, handleAadhaarBackScanImage, handleScanImage, handleHeadChange, handleMemberChange, handleDocumentUpload, handleHeadImageUpload, handlePaymentScreenshotUpload, handleMemberScanImage, submitFinalApplication, buildStaffHealthCardPayload, submitStaffApplication, handleInitiateCashfreePayment, handleVerifyCashfreePayment, handleNext, handleBack, cardPreviewData, renderHeadDuplicateHint, thermalPaymentLabel, thermalPaymentRef, hasPrintableReceipt, captureHeadPhoto, stopHeadCamera, startHeadCamera, startCamera, stopCamera, capturePhoto, startAadhaarBackCamera, stopAadhaarBackCamera, captureAadhaarBackPhoto, startDocBackCamera, stopDocBackCamera, captureDocBackPhoto, addMember, removeMember, startMemberCamera, stopMemberCamera, captureMemberPhoto, captureStaffCashReceipt, setHeadCameraActive, setHeadCameraPermissionDenied, setMemberScanningIndex, setMemberScanProgress, setMemberOcrLoading, setMemberCameraActive, setStaffCashCameraLoading, setOcrLoading, setOcrProgress, setBackOcrLoading, setBackOcrProgress, setCameraActive, setAadhaarBackCameraActive, setDocBackCameraLoading, setDocBackCameraActive } = form;
   return (
                   <div className="animate-in fade-in slide-in-from-right-4 duration-300">
                     <div className="bg-[#FAF3E1] rounded-lg p-3 px-4 flex items-center gap-3 border-l-4 border-[#FA8112] mb-5">
@@ -103,74 +104,69 @@ function Step1FamilyHeadView(form) {
                         <canvas ref={headCameraCanvasRef} className="hidden" />
                       </div>
 
-                      {/* 1st document: upload with OCR — middle column */}
+                      {/* Aadhaar front — OCR */}
                       <div className="w-full md:flex-1 md:min-w-0 flex flex-col items-center justify-center p-3 sm:p-4 rounded-xl border border-[#fa8112]/30 bg-[#faf3e1] min-h-0">
-                        <h4 className="w-full text-[11px] sm:text-[12px] font-bold text-[#222222] mb-1 text-center">
-                          1st document — upload
+                        <h4 className="w-full text-[11px] sm:text-[12px] font-bold text-[#222222] mb-0.5 text-center">
+                          Aadhaar front — scan
                         </h4>
+                        <p className="text-[10px] text-gray-500 text-center mb-2 px-1">
+                          Name, DOB, gender &amp; Aadhaar number
+                        </p>
 
                         {cameraActive ? (
                           <div className="w-full max-w-sm space-y-2 animate-in fade-in zoom-in-95">
-                            <div className="relative aspect-[4/3] max-h-[200px] sm:max-h-[220px] bg-black rounded-lg overflow-hidden shadow border border-white">
+                            <div className="relative aspect-[4/3] max-h-[200px] sm:max-h-[220px] bg-zinc-900 rounded-lg overflow-hidden shadow border border-white">
                               <video
                                 ref={videoRef}
                                 autoPlay
                                 playsInline
-                                className="w-full h-full object-cover scale-[1.4]"
+                                className="w-full h-full object-contain"
                               />
-                              <div className="absolute inset-x-4 top-1/2 -translate-y-1/2 border-2 border-[#fa8112]/80 border-dashed aspect-[1.586/1] rounded-lg pointer-events-none">
-                                <p className="absolute -top-6 left-0 right-0 text-center text-[10px] text-white font-semibold drop-shadow">
-                                  Align Aadhaar front within frame
-                                </p>
-                              </div>
-                              {ocrLoading && (
-                                <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center p-6 transition-all animate-in fade-in">
-                                  <div className="w-full max-w-[160px] h-1.5 bg-white/20 rounded-full overflow-hidden mb-3 relative">
-                                    <div
-                                      className="h-full bg-[#fa8112] transition-all duration-300"
-                                      style={{ width: `${ocrProgress}%` }}
-                                    ></div>
-                                  </div>
-                                  <p className="text-white text-[12px] font-bold animate-pulse">
-                                    Scanning... {ocrProgress}%
-                                  </p>
-                                  <div className="absolute left-0 right-0 h-0.5 bg-[#fa8112] shadow-[0_0_10px_#fa8112] blur-[1px] animate-[scan_2s_infinite]"></div>
-                                </div>
-                              )}
+                              <AadhaarCameraFrame
+                                label="Align Aadhaar front in frame"
+                                hint="Point rear camera at the card — not your face"
+                              />
+                              <AadhaarScanOverlay
+                                active={ocrLoading}
+                                progress={ocrProgress}
+                                statusMessage={ocrStatusMessage || "Scanning…"}
+                              />
                             </div>
-                            <style>{`
-                              @keyframes scan {
-                                0% { top: 20%; }
-                                50% { top: 80%; }
-                                100% { top: 20%; }
-                              }
-                            `}</style>
                             <div className="flex gap-2">
                               <button
+                                type="button"
                                 onClick={stopCamera}
-                                className="flex-1 py-2 text-[12px] bg-white border border-gray-200 text-gray-600 rounded-lg font-semibold transition-all"
+                                disabled={ocrLoading}
+                                className="flex-1 py-2 text-[12px] bg-white border border-gray-200 text-gray-600 rounded-lg font-semibold transition-all disabled:opacity-50"
                               >
                                 Cancel
                               </button>
                               <button
+                                type="button"
                                 onClick={capturePhoto}
                                 disabled={ocrLoading}
-                                className="flex-[2] py-2 text-[12px] bg-[#fa8112] text-white rounded-lg font-semibold shadow flex items-center justify-center gap-1.5 active:scale-95"
+                                className="flex-[2] py-2 text-[12px] bg-[#fa8112] text-white rounded-lg font-semibold shadow flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-70"
                               >
                                 {ocrLoading ? (
                                   <Loader2 className="animate-spin" size={16} />
                                 ) : (
                                   <Camera size={16} />
                                 )}
-                                {ocrLoading ? "Scanning..." : "Capture & Scan"}
+                                {ocrLoading ? "Scanning…" : "Capture & Scan"}
                               </button>
                             </div>
                           </div>
                         ) : (
-                          <div className="flex flex-col items-center group w-full">
+                          <div className="relative flex flex-col items-center group w-full min-h-[168px] justify-center rounded-lg">
+                            <AadhaarScanOverlay
+                              active={ocrLoading}
+                              progress={ocrProgress}
+                              statusMessage={ocrStatusMessage || "Scanning Aadhaar front…"}
+                            />
                             <div
                               className="w-14 h-14 bg-white rounded-xl flex items-center justify-center shadow mb-3 cursor-pointer hover:scale-105 transition-all border border-orange-100 group-hover:border-[#fa8112]"
-                              onClick={startCamera}
+                              onClick={ocrLoading ? undefined : startCamera}
+                              role="presentation"
                             >
                               {ocrLoading ? (
                                 <Loader2
@@ -184,7 +180,7 @@ function Step1FamilyHeadView(form) {
                               )}
                             </div>
                             <p className="text-[11px] text-gray-500 text-center mb-3 px-1">
-                              Camera or gallery — name, DOB, gender &amp; Aadhaar no.
+                              Camera or gallery
                             </p>
                             <div className="flex gap-2 w-full text-[12px] justify-center flex-wrap">
                               <button
@@ -222,38 +218,42 @@ function Step1FamilyHeadView(form) {
                         <h4 className="w-full text-[11px] sm:text-[12px] font-bold text-[#222222] mb-1 text-center">
                           Aadhaar back — scan
                         </h4>
+                        <p className="text-[10px] text-gray-500 text-center mb-2 px-1">
+                          Address &amp; pincode
+                        </p>
                         {aadhaarBackCameraActive ? (
-                          <div className="w-full max-w-sm space-y-2">
-                            <div className="relative aspect-[4/3] max-h-[200px] sm:max-h-[220px] bg-black rounded-lg overflow-hidden shadow border border-white">
-                              <video ref={aadhaarBackVideoRef} autoPlay playsInline className="w-full h-full object-cover scale-[1.4]" />
-                              <div className="absolute inset-x-4 top-1/2 -translate-y-1/2 border-2 border-[#fa8112]/80 border-dashed aspect-[1.586/1] rounded-lg pointer-events-none">
-                                <p className="absolute -top-6 left-0 right-0 text-center text-[10px] text-white font-semibold drop-shadow">
-                                  Align Aadhaar back within frame
-                                </p>
-                              </div>
-                              {backOcrLoading && (
-                                <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center p-6">
-                                  <div className="w-full max-w-[160px] h-1.5 bg-white/20 rounded-full overflow-hidden mb-3">
-                                    <div className="h-full bg-[#fa8112] transition-all" style={{ width: `${backOcrProgress}%` }} />
-                                  </div>
-                                  <p className="text-white text-[12px] font-bold animate-pulse">Scanning... {backOcrProgress}%</p>
-                                </div>
-                              )}
+                          <div className="w-full max-w-sm space-y-2 animate-in fade-in zoom-in-95">
+                            <div className="relative aspect-[4/3] max-h-[200px] sm:max-h-[220px] bg-zinc-900 rounded-lg overflow-hidden shadow border border-white">
+                              <video ref={aadhaarBackVideoRef} autoPlay playsInline className="w-full h-full object-contain" />
+                              <AadhaarCameraFrame
+                                label="Align Aadhaar back in frame"
+                                hint="Show address side of the card"
+                              />
+                              <AadhaarScanOverlay
+                                active={backOcrLoading}
+                                progress={backOcrProgress}
+                                statusMessage={backOcrStatusMessage || "Scanning…"}
+                              />
                             </div>
                             <div className="flex gap-2">
-                              <button type="button" onClick={stopAadhaarBackCamera} className="flex-1 py-2 text-[12px] bg-white border border-gray-200 text-gray-600 rounded-lg font-semibold">Cancel</button>
-                              <button type="button" onClick={captureAadhaarBackPhoto} disabled={backOcrLoading} className="flex-[2] py-2 text-[12px] bg-[#fa8112] text-white rounded-lg font-semibold shadow flex items-center justify-center gap-1.5">
+                              <button type="button" onClick={stopAadhaarBackCamera} disabled={backOcrLoading} className="flex-1 py-2 text-[12px] bg-white border border-gray-200 text-gray-600 rounded-lg font-semibold disabled:opacity-50">Cancel</button>
+                              <button type="button" onClick={captureAadhaarBackPhoto} disabled={backOcrLoading} className="flex-[2] py-2 text-[12px] bg-[#fa8112] text-white rounded-lg font-semibold shadow flex items-center justify-center gap-1.5 disabled:opacity-70">
                                 {backOcrLoading ? <Loader2 className="animate-spin" size={16} /> : <Camera size={16} />}
-                                {backOcrLoading ? "Scanning..." : "Capture & Scan"}
+                                {backOcrLoading ? "Scanning…" : "Capture & Scan"}
                               </button>
                             </div>
                           </div>
                         ) : (
-                          <div className="flex flex-col items-center w-full">
-                            <div className="w-14 h-14 bg-white rounded-xl flex items-center justify-center shadow mb-3 cursor-pointer border border-orange-100 hover:border-[#fa8112]" onClick={startAadhaarBackCamera} role="presentation">
+                          <div className="relative flex flex-col items-center w-full min-h-[168px] justify-center rounded-lg">
+                            <AadhaarScanOverlay
+                              active={backOcrLoading}
+                              progress={backOcrProgress}
+                              statusMessage={backOcrStatusMessage || "Scanning Aadhaar back…"}
+                            />
+                            <div className="w-14 h-14 bg-white rounded-xl flex items-center justify-center shadow mb-3 cursor-pointer border border-orange-100 hover:border-[#fa8112]" onClick={backOcrLoading ? undefined : startAadhaarBackCamera} role="presentation">
                               {backOcrLoading ? <Loader2 className="animate-spin text-[#fa8112]" size={24} /> : docAadhaarBack ? <Check size={24} className="text-green-600" /> : <Camera size={24} className="text-[#fa8112]" />}
                             </div>
-                            <p className="text-[11px] text-gray-500 text-center mb-3 px-1">Camera or gallery — address &amp; pincode from Aadhaar back.</p>
+                            <p className="text-[11px] text-gray-500 text-center mb-3 px-1">Camera or gallery</p>
                             <div className="flex gap-2 w-full text-[12px] justify-center flex-wrap">
                               <button type="button" onClick={startAadhaarBackCamera} className="px-3 py-2 bg-[#fa8112] text-white rounded-lg font-semibold flex items-center gap-1.5"><Camera size={13} /> Camera</button>
                               <button type="button" onClick={() => aadhaarBackOcrInputRef.current?.click()} className="px-3 py-2 bg-white border border-[#fa8112] text-[#fa8112] rounded-lg font-semibold flex items-center gap-1.5"><UploadCloud size={13} /> Gallery</button>

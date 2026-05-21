@@ -563,7 +563,7 @@ const HealthCardDetails = () => {
                     
                     let baseUrl = import.meta.env.VITE_API_BASE_URL || "";
                     if (!baseUrl && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")) {
-                      baseUrl = "https://bkbs-backend.vercel.app";
+                      baseUrl = "https://bkbsbackend-production.up.railway.app";
                     }
 
                     const fileBase = baseUrl.replace(/\/api$/, "");
