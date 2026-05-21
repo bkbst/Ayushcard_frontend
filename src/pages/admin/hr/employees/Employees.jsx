@@ -7,6 +7,10 @@ import { useToast } from "../../../../components/ui/Toast";
 import Pagination from "../../../../components/ui/Pagination";
 
 import { getEmployees } from "../../../../data/mockData";
+import {
+  downloadAllAyushCardsAsPdf,
+  unwrapCardFromApiResponse,
+} from "../../../../utils/downloadAyushCard";
 
 /* ── Status badge for cards ────────────────────────────────────────── */
 const CardStatusBadge = ({ status }) => {
@@ -57,6 +61,7 @@ const normalizeCard = (card) => {
 
 /* ── Employee Cards Panel ──────────────────────────────────────────── */
 const EmployeeCardsPanel = ({ employee, onClose }) => {
+  const { toastSuccess, toastWarn, toastError } = useToast();
   const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -64,8 +69,99 @@ const EmployeeCardsPanel = ({ employee, onClose }) => {
   const [cardsPerPage, setCardsPerPage] = useState(10);
   const [cardsTotal, setCardsTotal] = useState(0);
   const [cardsTotalPages, setCardsTotalPages] = useState(1);
+  const [downloadingAll, setDownloadingAll] = useState(false);
+  const [downloadAllProgress, setDownloadAllProgress] = useState("");
 
   const employeeMongoId = employee?._rawId || employee?.id;
+
+  const fetchFullCardRecord = async (listCard) => {
+    const id = listCard._id || listCard.applicationId;
+    if (!id) return null;
+    try {
+      const res = await apiService.getHealthCardById(id);
+      return unwrapCardFromApiResponse(res);
+    } catch {
+      return null;
+    }
+  };
+
+  const downloadOptions = {
+    fetchCardById: fetchFullCardRecord,
+    fetchMembers: (cardId) => apiService.getCardMembers(cardId),
+  };
+
+  const fetchAllEmployeeCards = async () => {
+    const all = [];
+    let page = 1;
+    let totalPages = 1;
+    const limit = 50;
+
+    do {
+      const res = await apiService.getHealthCardsByEmployee(employeeMongoId, {
+        page,
+        limit,
+      });
+      const envelope = res?.data && typeof res.data === "object" ? res.data : res;
+      const raw = Array.isArray(envelope?.cards)
+        ? envelope.cards
+        : Array.isArray(res?.data?.cards)
+          ? res.data.cards
+          : [];
+      const pagination = envelope?.pagination || res?.data?.pagination || {};
+      totalPages = Number(
+        pagination.pages ?? (Math.ceil((pagination.total ?? raw.length) / limit) || 1),
+      );
+      all.push(...raw.map(normalizeCard));
+      page += 1;
+    } while (page <= totalPages);
+
+    return all;
+  };
+
+  const handleDownloadAllAyushCards = async () => {
+    if (!employeeMongoId || String(employeeMongoId).startsWith("EMP-")) {
+      toastWarn("Cannot download — employee has no server id.");
+      return;
+    }
+    setDownloadingAll(true);
+    setDownloadAllProgress("Loading cards…");
+    try {
+      const allCards = await fetchAllEmployeeCards();
+      if (allCards.length === 0) {
+        toastWarn("No Ayush cards to download.");
+        return;
+      }
+
+      const safeName = String(employee.name || "employee")
+        .replace(/[^\w]+/g, "_")
+        .slice(0, 40);
+
+      await downloadAllAyushCardsAsPdf(
+        allCards,
+        {
+          ...downloadOptions,
+          fileName: `${safeName}_all_ayush_cards`,
+        },
+        (current, total, phase) => {
+          if (phase === "loading") {
+            setDownloadAllProgress(`Loading card data ${current} of ${total}…`);
+          } else {
+            setDownloadAllProgress(`Rendering cards ${current} of ${total}…`);
+          }
+        },
+      );
+
+      toastSuccess(
+        `Downloaded ${allCards.length} Ayush Card${allCards.length !== 1 ? "s" : ""} (front & back) in one PDF.`,
+      );
+    } catch (err) {
+      console.error("Download all Ayush cards failed:", err);
+      toastError(err?.message || "Failed to download all Ayush Cards.");
+    } finally {
+      setDownloadingAll(false);
+      setDownloadAllProgress("");
+    }
+  };
 
   useEffect(() => {
     setCardsPage(1);
@@ -131,14 +227,38 @@ const EmployeeCardsPanel = ({ employee, onClose }) => {
       {/* Slide-over panel */}
       <div className="w-full max-w-2xl bg-white shadow-2xl flex flex-col h-full overflow-hidden animate-slide-in-right">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
-          <div>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0 gap-3">
+          <div className="min-w-0">
             <h2 className="text-lg font-bold text-[#22333B]">Cards by {employee.name}</h2>
-            <p className="text-xs text-gray-500 mt-0.5">{employee.id} · {employee.email}</p>
+            <p className="text-xs text-gray-500 mt-0.5 truncate">
+              {employee.id} · {employee.email}
+            </p>
+            {downloadAllProgress && (
+              <p className="text-xs text-[#F68E5F] mt-1 font-medium">{downloadAllProgress}</p>
+            )}
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors">
-            <X size={20} />
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleDownloadAllAyushCards}
+              disabled={downloadingAll || loading || cards.length === 0}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-[#F68E5F] text-white hover:bg-[#ff7535] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {downloadingAll ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Download size={14} />
+              )}
+              Download All
+            </button>
+            <button
+              onClick={onClose}
+              disabled={downloadingAll}
+              className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors disabled:opacity-50"
+            >
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         {/* Body */}
@@ -171,21 +291,21 @@ const EmployeeCardsPanel = ({ employee, onClose }) => {
                   key={card._id || idx}
                   className="border border-gray-100 rounded-xl p-4 hover:bg-gray-50 transition-colors"
                 >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-[13px] font-mono text-[#F68E5F] font-medium truncate">
-                          {card.id}
-                        </span>
-                        <CardStatusBadge status={card.status} />
-                      </div>
-                      <p className="text-[14px] font-semibold text-[#22333B] truncate">{card.applicant || "—"}</p>
-                      <div className="flex items-center gap-4 mt-1.5 text-[12px] text-gray-500 flex-wrap">
-                        {card.phone && <span>📞 {card.phone}</span>}
-                        {card.pincode && <span>📍 {card.pincode}</span>}
-                        <span>👥 {memberLabel(card)}</span>
-                        <span>₹{Number(card.payment?.totalPaid ?? 0).toFixed(2)}</span>
-                      </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[13px] font-mono text-[#F68E5F] font-medium truncate">
+                        {card.id}
+                      </span>
+                      <CardStatusBadge status={card.status} />
+                    </div>
+                    <p className="text-[14px] font-semibold text-[#22333B] truncate">
+                      {card.applicant || "—"}
+                    </p>
+                    <div className="flex items-center gap-4 mt-1.5 text-[12px] text-gray-500 flex-wrap">
+                      {card.phone && <span>📞 {card.phone}</span>}
+                      {card.pincode && <span>📍 {card.pincode}</span>}
+                      <span>👥 {memberLabel(card)}</span>
+                      <span>₹{Number(card.payment?.totalPaid ?? 0).toFixed(2)}</span>
                     </div>
                   </div>
                 </div>

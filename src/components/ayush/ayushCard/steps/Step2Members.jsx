@@ -1,5 +1,6 @@
 import { User, UploadCloud, Check, Camera, Loader2, X as CloseIcon, Plus, ArrowLeft, ArrowRight, Banknote, CheckCircle2, ScanLine, FileText, ImageIcon, Calendar, RefreshCw } from "lucide-react";
 import { useAyushCardForm } from "../AyushCardFormContext.jsx";
+import { AadhaarCameraScanner } from "../components/AadhaarCameraScanner.jsx";
 
 export default function Step2Members() {
   const form = useAyushCardForm();
@@ -7,7 +8,7 @@ export default function Step2Members() {
 }
 
 function Step2MembersView(form) {
-  const { variant, isOpen, onClose, skipPayment, staffPaymentFlow, onStaffSubmit, onBack, currentStep, setCurrentStep, applicationId, setApplicationId, submissionReceipt, setSubmissionReceipt, toastWarn, toastError, toastSuccess, todayCampId, todayCampName, submitting, setSubmitting, docFront, setDocFront, docBack, setDocBack, docAadhaarBack, setDocAadhaarBack, ocrFileInputRef, aadhaarBackOcrInputRef, docBackInputRef, docBackCameraInputRef, headImageInputRef, headCameraVideoRef, headCameraCanvasRef, paymentInputRef, maxDobForAdult, paymentScreenshot, setPaymentScreenshot, isEditingReview, setIsEditingReview, declarationAccepted, setDeclarationAccepted, paymentMethod, setPaymentMethod, onlinePaymentLoading, setOnlinePaymentLoading, verifyLoading, setVerifyLoading, orderId, setOrderId, txnId, setTxnId, saveError, setSaveError, staffPaymentMode, setStaffPaymentMode, staffCashReceiptImage, setStaffCashReceiptImage, staffCashVideoRef, staffCashCanvasRef, staffCashCameraActive, staffCashCameraLoading, ocrLoading, ocrProgress, backOcrLoading, backOcrProgress, videoRef, canvasRef, cameraActive, aadhaarBackVideoRef, aadhaarBackCanvasRef, aadhaarBackCameraActive, docBackVideoRef, docBackCanvasRef, docBackCameraActive, docBackCameraLoading, headImage, setHeadImage, headCameraActive, headCameraPermissionDenied, familyHead, setFamilyHead, headPhoneDuplicate, headAadhaarDuplicate, headNameDuplicate, members, setMembers, activeMemberTab, setActiveMemberTab, memberScanningIndex, memberScanProgress, memberOcrLoading, memberVideoRef, memberCanvasRef, memberCameraActive, memberInputRef, addMemberScrollAnchorRef, successStep, totalMembersCount, estimatedFee, extraMembersBeyondIncluded, stepperSteps, stepperProgressPct, footerStepMax, stopStaffCashCamera, handleRawBtPrint, resetForm, handleStaffChooseOfflineCash, handleStaffChooseOnline, handleAadhaarBackScanImage, handleScanImage, handleHeadChange, handleMemberChange, handleDocumentUpload, handleHeadImageUpload, handlePaymentScreenshotUpload, handleMemberScanImage, submitFinalApplication, buildStaffHealthCardPayload, submitStaffApplication, handleInitiateCashfreePayment, handleVerifyCashfreePayment, handleNext, handleBack, cardPreviewData, renderHeadDuplicateHint, thermalPaymentLabel, thermalPaymentRef, hasPrintableReceipt, captureHeadPhoto, stopHeadCamera, startHeadCamera, startCamera, stopCamera, capturePhoto, startAadhaarBackCamera, stopAadhaarBackCamera, captureAadhaarBackPhoto, startDocBackCamera, stopDocBackCamera, captureDocBackPhoto, addMember, removeMember, startMemberCamera, stopMemberCamera, captureMemberPhoto, captureStaffCashReceipt, setHeadCameraActive, setHeadCameraPermissionDenied, setMemberScanningIndex, setMemberScanProgress, setMemberOcrLoading, setMemberCameraActive, setStaffCashCameraLoading, setOcrLoading, setOcrProgress, setBackOcrLoading, setBackOcrProgress, setCameraActive, setAadhaarBackCameraActive, setDocBackCameraLoading, setDocBackCameraActive } = form;
+  const { variant, isOpen, onClose, skipPayment, staffPaymentFlow, onStaffSubmit, onBack, currentStep, setCurrentStep, applicationId, setApplicationId, submissionReceipt, setSubmissionReceipt, toastWarn, toastError, toastSuccess, todayCampId, todayCampName, submitting, setSubmitting, docFront, setDocFront, docBack, setDocBack, docAadhaarBack, setDocAadhaarBack, ocrFileInputRef, aadhaarBackOcrInputRef, docBackInputRef, docBackCameraInputRef, headImageInputRef, headCameraVideoRef, headCameraCanvasRef, paymentInputRef, maxDobForAdult, paymentScreenshot, setPaymentScreenshot, isEditingReview, setIsEditingReview, declarationAccepted, setDeclarationAccepted, paymentMethod, setPaymentMethod, onlinePaymentLoading, setOnlinePaymentLoading, verifyLoading, setVerifyLoading, orderId, setOrderId, txnId, setTxnId, saveError, setSaveError, staffPaymentMode, setStaffPaymentMode, staffCashReceiptImage, setStaffCashReceiptImage, staffCashVideoRef, staffCashCanvasRef, staffCashCameraActive, staffCashCameraLoading, ocrLoading, ocrProgress, backOcrLoading, backOcrProgress, videoRef, canvasRef, cameraActive, aadhaarBackVideoRef, aadhaarBackCanvasRef, aadhaarBackCameraActive, docBackVideoRef, docBackCanvasRef, docBackCameraActive, docBackCameraLoading, headImage, setHeadImage, headCameraActive, headCameraPermissionDenied, familyHead, setFamilyHead, headPhoneDuplicate, headAadhaarDuplicate, headNameDuplicate, members, setMembers, activeMemberTab, setActiveMemberTab, memberScanningIndex, memberScanProgress, memberOcrLoading, memberVideoRef, memberCanvasRef, memberCameraActive, memberCameraLoading, memberCameraError, memberInputRef, addMemberScrollAnchorRef, successStep, totalMembersCount, estimatedFee, extraMembersBeyondIncluded, stepperSteps, stepperProgressPct, footerStepMax, stopStaffCashCamera, handleRawBtPrint, resetForm, handleStaffChooseOfflineCash, handleStaffChooseOnline, handleAadhaarBackScanImage, handleScanImage, handleHeadChange, handleMemberChange, handleDocumentUpload, handleHeadImageUpload, handlePaymentScreenshotUpload, handleMemberScanImage, submitFinalApplication, buildStaffHealthCardPayload, submitStaffApplication, handleInitiateCashfreePayment, handleVerifyCashfreePayment, handleNext, handleBack, cardPreviewData, renderHeadDuplicateHint, thermalPaymentLabel, thermalPaymentRef, hasPrintableReceipt, captureHeadPhoto, stopHeadCamera, startHeadCamera, startCamera, stopCamera, capturePhoto, startAadhaarBackCamera, stopAadhaarBackCamera, captureAadhaarBackPhoto, startDocBackCamera, stopDocBackCamera, captureDocBackPhoto, addMember, removeMember, startMemberCamera, stopMemberCamera, captureMemberPhoto, captureStaffCashReceipt, setHeadCameraActive, setHeadCameraPermissionDenied, setMemberScanningIndex, setMemberScanProgress, setMemberOcrLoading, setMemberCameraActive, setStaffCashCameraLoading, setOcrLoading, setOcrProgress, setBackOcrLoading, setBackOcrProgress, setCameraActive, setAadhaarBackCameraActive, setDocBackCameraLoading, setDocBackCameraActive } = form;
   return (
                   <div className="animate-in fade-in slide-in-from-right-4 duration-300">
                     <p className="text-[14px] text-gray-500 mb-4">
@@ -212,22 +213,39 @@ function Step2MembersView(form) {
                         {/* Member Scanning UI */}
                         {memberScanningIndex === activeMemberTab - 1 && (
                           <div className="md:col-span-2 bg-orange-50 border border-[#FBD7B0] rounded-lg p-3 mb-3">
-                            {memberCameraActive ? (
+                            {memberCameraLoading ? (
+                              <div
+                                className="flex flex-col items-center justify-center gap-2 py-8 rounded-lg bg-zinc-900/90 min-h-[120px]"
+                                role="status"
+                                aria-live="polite"
+                              >
+                                <Loader2
+                                  className="animate-spin text-[#FA8112]"
+                                  size={28}
+                                />
+                                <p className="text-[12px] text-white font-medium">
+                                  Starting camera…
+                                </p>
+                              </div>
+                            ) : memberCameraActive ? (
                               <div className="space-y-3">
-                                <div className="relative w-full overflow-hidden rounded-lg">
-                                  <video
-                                    ref={memberVideoRef}
-                                    autoPlay
-                                    playsInline
-                                    className="w-full rounded-lg border border-[#F6B579] max-h-64 object-cover scale-[1.4]"
-                                  />
-                                  <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 border-2 border-white/50 border-dashed aspect-[1.6/1] w-[70%] rounded-lg pointer-events-none" />
-                                </div>
+                                <AadhaarCameraScanner
+                                  videoRef={memberVideoRef}
+                                  hint="Hold ID card flat inside the frame"
+                                />
+                                <canvas
+                                  ref={memberCanvasRef}
+                                  className="hidden"
+                                  aria-hidden
+                                />
                                 <div className="flex flex-col sm:flex-row gap-2">
                                   <button
+                                    type="button"
                                     onClick={captureMemberPhoto}
-                                    disabled={memberOcrLoading}
-                                    className="flex-1 flex items-center justify-center gap-2 px-2 sm:px-4 py-2 bg-[#FA8112] text-white rounded-lg hover:bg-[#E47510] font-semibold text-[10px] sm:text-[13px] leading-tight"
+                                    disabled={
+                                      memberOcrLoading || memberCameraLoading
+                                    }
+                                    className="flex-1 flex items-center justify-center gap-2 px-2 sm:px-4 py-2 bg-[#FA8112] text-white rounded-lg hover:bg-[#E47510] font-semibold text-[10px] sm:text-[13px] leading-tight disabled:opacity-60"
                                   >
                                     {memberOcrLoading ? (
                                       <Loader2
@@ -237,26 +255,37 @@ function Step2MembersView(form) {
                                     ) : (
                                       <Check size={16} />
                                     )}{" "}
-                                    Capture
+                                    Capture & Scan
                                   </button>
                                   <button
+                                    type="button"
                                     onClick={() => stopMemberCamera()}
                                     disabled={memberOcrLoading}
-                                    className="flex-1 flex items-center justify-center gap-2 px-2 sm:px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-100 font-semibold text-[10px] sm:text-[13px] leading-tight"
+                                    className="flex-1 flex items-center justify-center gap-2 px-2 sm:px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-100 font-semibold text-[10px] sm:text-[13px] leading-tight disabled:opacity-60"
                                   >
-                                    <X size={16} /> Cancel
+                                    <CloseIcon size={16} /> Cancel
                                   </button>
                                 </div>
                               </div>
                             ) : (
                               <div className="space-y-3">
+                                {memberCameraError ? (
+                                  <div
+                                    className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5"
+                                    role="alert"
+                                  >
+                                    <p className="text-[12px] text-red-700 font-medium">
+                                      {memberCameraError}
+                                    </p>
+                                  </div>
+                                ) : null}
                                 {memberOcrLoading || memberScanProgress > 0 ? (
                                   <div>
                                     <div className="w-full bg-gray-200 rounded-full h-2">
                                       <div
                                         className="bg-[#FA8112] h-2 rounded-full transition-all"
                                         style={{
-                                          width: `${memberOcrLoading ? memberScanProgress : memberScanProgress}%`,
+                                          width: `${memberScanProgress}%`,
                                         }}
                                       />
                                     </div>
@@ -267,20 +296,22 @@ function Step2MembersView(form) {
                                 ) : null}
                                 <div className="flex flex-col sm:flex-row gap-2">
                                   <button
+                                    type="button"
                                     onClick={() =>
                                       startMemberCamera(activeMemberTab - 1)
                                     }
                                     disabled={memberOcrLoading}
-                                    className="flex-1 flex items-center justify-center gap-2 px-2 sm:px-4 py-2 bg-[#FA8112] text-white rounded-lg hover:bg-[#E47510] font-semibold text-[10px] sm:text-[13px] leading-tight"
+                                    className="flex-1 flex items-center justify-center gap-2 px-2 sm:px-4 py-2 bg-[#FA8112] text-white rounded-lg hover:bg-[#E47510] font-semibold text-[10px] sm:text-[13px] leading-tight disabled:opacity-60"
                                   >
                                     <Camera size={16} /> Use Camera
                                   </button>
                                   <button
+                                    type="button"
                                     onClick={() =>
                                       memberInputRef.current?.click()
                                     }
                                     disabled={memberOcrLoading}
-                                    className="flex-1 flex items-center justify-center gap-2 px-2 sm:px-4 py-2 bg-[#FA8112] text-white rounded-lg hover:bg-[#E47510] font-semibold text-[10px] sm:text-[13px] leading-tight"
+                                    className="flex-1 flex items-center justify-center gap-2 px-2 sm:px-4 py-2 bg-[#FA8112] text-white rounded-lg hover:bg-[#E47510] font-semibold text-[10px] sm:text-[13px] leading-tight disabled:opacity-60"
                                   >
                                     <UploadCloud size={16} /> Upload Photo
                                   </button>
@@ -289,13 +320,14 @@ function Step2MembersView(form) {
                                   ref={memberInputRef}
                                   type="file"
                                   accept="image/*"
+                                  capture="environment"
                                   onChange={(e) =>
                                     handleMemberScanImage(
                                       e,
                                       activeMemberTab - 1,
                                     )
                                   }
-                                  style={{ display: "none" }}
+                                  className="hidden"
                                 />
                               </div>
                             )}

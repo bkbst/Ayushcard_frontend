@@ -26,6 +26,13 @@ import {
   captureVideoScanFrame,
   optimizeImageForOcr,
 } from "../../../utils/imageOptimizer";
+import {
+  attachStreamToVideo,
+  detachVideoElement,
+  getCameraErrorMessage,
+  requestCameraStream,
+  stopMediaStream,
+} from "../../../utils/cameraStream";
 import { load } from "@cashfreepayments/cashfree-js";
 import { useAttendance } from "../../../context/AttendanceContext";
 import { compressBase64Image } from "./compressBase64Image.js";
@@ -241,6 +248,8 @@ export function useAyushCardApplicationForm({
   const memberCanvasRef = useRef(null);
   const memberStreamRef = useRef(null);
   const [memberCameraActive, setMemberCameraActive] = useState(false);
+  const [memberCameraLoading, setMemberCameraLoading] = useState(false);
+  const [memberCameraError, setMemberCameraError] = useState(null);
   const memberInputRef = useRef(null);
   /** Step 2: scroll to bottom “Add Member” block after Continue from step 1 */
   const addMemberScrollAnchorRef = useRef(null);
@@ -581,20 +590,37 @@ export function useAyushCardApplicationForm({
   }, [headCameraActive]);
 
   useEffect(() => {
-    if (
-      memberCameraActive &&
-      memberVideoRef.current &&
-      memberStreamRef.current
-    ) {
-      memberVideoRef.current.srcObject = memberStreamRef.current;
+    if (!memberCameraActive || !memberStreamRef.current) return;
+
+    let cancelled = false;
+    const bindVideo = async () => {
+      await new Promise((r) => requestAnimationFrame(r));
+      if (cancelled) return;
+      const video = memberVideoRef.current;
+      const stream = memberStreamRef.current;
+      if (!video || !stream) return;
+      await attachStreamToVideo(video, stream);
+    };
+    bindVideo();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [memberCameraActive, memberScanningIndex]);
+
+  useEffect(() => {
+    if (memberScanningIndex === null) return;
+    const expectedIndex = activeMemberTab - 1;
+    if (activeMemberTab === 0 || memberScanningIndex !== expectedIndex) {
+      stopMemberCamera({ resetScanningIndex: true });
     }
-  }, [memberCameraActive]);
+  }, [activeMemberTab]);
 
   useEffect(() => {
     return () => {
-      if (memberStreamRef.current) {
-        memberStreamRef.current.getTracks().forEach((track) => track.stop());
-      }
+      stopMediaStream(memberStreamRef.current);
+      memberStreamRef.current = null;
+      detachVideoElement(memberVideoRef.current);
     };
   }, []);
 
@@ -1517,46 +1543,62 @@ export function useAyushCardApplicationForm({
   };
 
   const removeMember = (indexToRemove) => {
-    // If we remove a member, we need to adjust the active tab
+    if (memberScanningIndex === indexToRemove) {
+      stopMemberCamera({ resetScanningIndex: true });
+    }
+
     const updatedMembers = members.filter((_, i) => i !== indexToRemove);
     setMembers(updatedMembers);
 
-    // If we closed the currently active member tab, switch back to head
     if (activeMemberTab === indexToRemove + 1) {
       setActiveMemberTab(0);
     } else if (activeMemberTab > indexToRemove + 1) {
-      // Shift active tab left if we removed a tab before it
       setActiveMemberTab(activeMemberTab - 1);
     }
   };
 
-  // Member Scanning Functions
-  const startMemberCamera = async (index) => {
-    try {
-      setMemberScanningIndex(index);
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: "environment",
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-      });
-      memberStreamRef.current = stream;
-      setMemberCameraActive(true);
-    } catch (err) {
-      console.error("Member camera error:", err);
-      toastWarn("Could not access camera. Please use Gallery Upload.");
+  const stopMemberCamera = ({ resetScanningIndex = true } = {}) => {
+    stopMediaStream(memberStreamRef.current);
+    memberStreamRef.current = null;
+    detachVideoElement(memberVideoRef.current);
+    setMemberCameraActive(false);
+    setMemberCameraLoading(false);
+    if (resetScanningIndex) {
+      setMemberScanningIndex(null);
+      setMemberCameraError(null);
     }
   };
 
-  const stopMemberCamera = ({ resetScanningIndex = true } = {}) => {
-    if (memberStreamRef.current) {
-      memberStreamRef.current.getTracks().forEach((track) => track.stop());
-      memberStreamRef.current = null;
-    }
-    if (memberVideoRef.current) memberVideoRef.current.srcObject = null;
+  const startMemberCamera = async (index) => {
+    stopMediaStream(memberStreamRef.current);
+    memberStreamRef.current = null;
+    detachVideoElement(memberVideoRef.current);
     setMemberCameraActive(false);
-    if (resetScanningIndex) setMemberScanningIndex(null);
+    setMemberCameraError(null);
+    setMemberCameraLoading(true);
+    setMemberScanningIndex(index);
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      const msg = "Camera is not supported in this browser.";
+      setMemberCameraLoading(false);
+      setMemberCameraError(msg);
+      toastWarn(msg);
+      return;
+    }
+
+    try {
+      const stream = await requestCameraStream({ preferEnvironment: true });
+      memberStreamRef.current = stream;
+      setMemberCameraActive(true);
+      setMemberCameraLoading(false);
+    } catch (err) {
+      console.error("Member camera error:", err);
+      const msg = getCameraErrorMessage(err);
+      setMemberCameraError(msg);
+      setMemberCameraActive(false);
+      setMemberCameraLoading(false);
+      toastWarn(msg);
+    }
   };
 
   const calculateAge = (dobStr) => {
@@ -1834,13 +1876,19 @@ export function useAyushCardApplicationForm({
     if (
       !memberVideoRef.current ||
       !memberCanvasRef.current ||
-      memberScanningIndex === null
+      memberScanningIndex === null ||
+      memberCameraLoading
     )
       return;
 
     const targetIndex = memberScanningIndex;
     const video = memberVideoRef.current;
     const canvas = memberCanvasRef.current;
+
+    if (!video.videoWidth || !video.videoHeight) {
+      toastWarn("Camera is still starting. Please wait a moment and try again.");
+      return;
+    }
 
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
@@ -2539,7 +2587,7 @@ export function useAyushCardApplicationForm({
     familyHead, setFamilyHead, headPhoneDuplicate, headAadhaarDuplicate, headNameDuplicate,
     members, setMembers, activeMemberTab, setActiveMemberTab,
     memberScanningIndex, memberScanProgress, memberOcrLoading, memberVideoRef, memberCanvasRef,
-    memberCameraActive, memberInputRef, addMemberScrollAnchorRef,
+    memberCameraActive, memberCameraLoading, memberCameraError, memberInputRef, addMemberScrollAnchorRef,
     successStep, totalMembersCount, estimatedFee, extraMembersBeyondIncluded,
     stepperSteps, stepperProgressPct, footerStepMax,
     stopStaffCashCamera, handleRawBtPrint, resetForm,
@@ -2562,6 +2610,8 @@ export function useAyushCardApplicationForm({
     setMemberScanProgress,
     setMemberOcrLoading,
     setMemberCameraActive,
+    setMemberCameraLoading,
+    setMemberCameraError,
     setStaffCashCameraLoading,
     setOcrLoading,
     setOcrProgress,

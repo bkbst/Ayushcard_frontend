@@ -1,67 +1,10 @@
 import React, { useState } from "react";
-import ReactDOM from "react-dom/client";
 import { X, Download, Loader2 } from "lucide-react";
-import { toJpeg } from "html-to-image";
 import jsPDF from "jspdf";
 import AyushCardPreview from "./AyushCardPreview";
+import { captureAyushCardPreview } from "../../utils/ayushCardCapture";
 import { useToast } from "../ui/Toast";
 import apiService from "../../api/service";
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   Capture a single AyushCardPreview into a JPEG data-URL.
-   The card is mounted temporarily at top-left (opacity 0, z-index -1) so
-   html2canvas can fully see it — unlike position:fixed left:-9999px which
-   is outside the viewport and gets clipped.
-───────────────────────────────────────────────────────────────────────────── */
-const captureCard = (card, side) =>
-  new Promise((resolve, reject) => {
-    const CARD_W = 580;
-    const CARD_H = 340;
-
-    const wrapper = document.createElement("div");
-    // Place off-screen but cleanly rendered
-    wrapper.style.cssText = `
-      position: absolute;
-      top: -10000px;
-      left: -10000px;
-      z-index: -9999;
-    `;
-    const host = document.createElement("div");
-    host.style.cssText = `
-      width: ${CARD_W}px;
-      height: ${CARD_H}px;
-      background: #ffffff;
-      position: relative;
-    `;
-    wrapper.appendChild(host);
-    document.body.appendChild(wrapper);
-
-    const root = ReactDOM.createRoot(host);
-    root.render(<AyushCardPreview data={card} side={side} exportMode={true} />);
-
-    // Wait a safe amount of time for React to render and images (QR / Profile) to fully load
-    setTimeout(async () => {
-      try {
-        const dataUrl = await toJpeg(host, {
-          quality: 1.0,
-          backgroundColor: "#ffffff",
-          pixelRatio: 2.5,
-          width: CARD_W,
-          height: CARD_H,
-          fontEmbedCSS: "", 
-          // Default placeholder to avoid complete capture fails if an external image errors out
-          imagePlaceholder: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
-        });
-        resolve(dataUrl);
-      } catch (err) {
-        console.error("Card capture error:", err);
-        reject(err);
-      } finally {
-        root.unmount();
-        if (document.body.contains(wrapper)) document.body.removeChild(wrapper);
-      }
-    }, 850); // 850ms wait ensures external HTTP images inject properly
-  });
 
 const drawGridPage = (pdf, imageDataUrls) => {
   const PAGE_W = 457.2;
@@ -187,7 +130,7 @@ export default function ExportPrintModal({ isOpen, onClose, selectedData, onExpo
     const imgs = [];
     for (let i = 0; i < cards.length; i++) {
       setProgress(`${batchLabel} — Rendering card ${i + 1} / ${cards.length}…`);
-      imgs.push(await captureCard(cards[i], side));
+      imgs.push(await captureAyushCardPreview(cards[i], side));
     }
     return imgs;
   };
