@@ -320,7 +320,6 @@ function Step2MembersView(form) {
                                   ref={memberInputRef}
                                   type="file"
                                   accept="image/*"
-                                  capture="environment"
                                   onChange={(e) =>
                                     handleMemberScanImage(
                                       e,

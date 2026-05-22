@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { formatCardCreatedAt } from "./healthCardUtils";
 
 export const exportToCSV = (data, filename) => {
   if (!data || !data.length) {
@@ -141,6 +142,9 @@ export function flattenAyushCardApplicationForExcel(r) {
       r.totalAmount ?? pay.totalAmount ?? pay.amount ?? pay.totalPaid ?? r.payment?.totalPaid ?? "",
     "Card number": safeStr(r.cardNo),
     "Application date": safeStr(r.applicationDate),
+    "Created at": safeStr(
+      formatCardCreatedAt(r.createdAt ?? r.created_at ?? r.applicationDate),
+    ),
     "Card issue date": safeStr(r.cardIssueDate),
     "Card expiry": safeStr(r.cardExpiredDate || r.cardExpiryDate),
     "Verification date": safeStr(r.verificationDate),

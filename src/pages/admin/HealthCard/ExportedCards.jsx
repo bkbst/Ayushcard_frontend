@@ -9,6 +9,8 @@ import {
   normalizeHealthCard,
   isExportedCard,
   parseHealthCardsResponse,
+  formatCardCreatedAt,
+  getCardCreatedAt,
 } from "../../../utils/healthCardUtils";
 
 const StatusBadge = ({ status }) => {
@@ -256,6 +258,9 @@ export default function ExportedCards() {
                   <th className="py-3 px-4 text-sm font-semibold text-[#22333B] text-right">
                     Amount
                   </th>
+                  <th className="py-3 px-4 text-sm font-semibold text-[#22333B] min-w-[170px]">
+                    Created At
+                  </th>
                   <th className="py-3 px-4 text-sm font-semibold text-[#22333B]">
                     Status
                   </th>
@@ -297,6 +302,16 @@ export default function ExportedCards() {
                       </td>
                       <td className="py-3 px-4 text-sm font-normal text-[#22333B] text-right whitespace-nowrap">
                         ₹{Number(row.payment?.totalPaid || 0).toFixed(2)}
+                      </td>
+                      <td
+                        className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap"
+                        title={
+                          getCardCreatedAt(row)
+                            ? String(getCardCreatedAt(row))
+                            : undefined
+                        }
+                      >
+                        {formatCardCreatedAt(getCardCreatedAt(row))}
                       </td>
                       <td className="py-3 px-4 whitespace-nowrap">
                         <StatusBadge status={row.status} />

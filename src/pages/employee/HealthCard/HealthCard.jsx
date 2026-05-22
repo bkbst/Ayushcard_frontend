@@ -18,6 +18,8 @@ import {
   normalizeHealthCard,
   isApplicationCard,
   parseHealthCardsResponse,
+  formatCardCreatedAt,
+  getCardCreatedAt,
 } from "../../../utils/healthCardUtils";
 
 const StatusBadge = ({ status }) => {
@@ -161,6 +163,9 @@ const HealthCard = () => {
         } else if (sortConfig.key === "amount") {
           aValue = a.payment.totalPaid;
           bValue = b.payment.totalPaid;
+        } else if (sortConfig.key === "createdAt") {
+          aValue = new Date(getCardCreatedAt(a) || 0).getTime() || 0;
+          bValue = new Date(getCardCreatedAt(b) || 0).getTime() || 0;
         }
 
         if (aValue === undefined) aValue = "";
@@ -302,7 +307,7 @@ const HealthCard = () => {
           </div>
         ) : paginatedData.length > 0 ? (
           <div className="overflow-y-auto overflow-x-auto flex-1">
-            <table className="min-w-[940px] w-full text-left border-collapse relative">
+            <table className="min-w-[1080px] w-full text-left border-collapse relative">
               <thead className="sticky top-0 z-10 bg-[#FFFFFF]">
                 <tr>
                   <th className="py-3 px-4 text-sm font-semibold text-[#22333B] w-17.5">
@@ -333,6 +338,12 @@ const HealthCard = () => {
                     "pincode",
                     "left",
                     "w-[120px]",
+                  )}
+                  {renderSortableHeader(
+                    "Created At",
+                    "createdAt",
+                    "left",
+                    "w-[190px]",
                   )}
                   {renderSortableHeader(
                     "Status",
@@ -378,6 +389,16 @@ const HealthCard = () => {
                       </td>
                       <td className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap">
                         {row.pincode || "—"}
+                      </td>
+                      <td
+                        className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap"
+                        title={
+                          getCardCreatedAt(row)
+                            ? String(getCardCreatedAt(row))
+                            : undefined
+                        }
+                      >
+                        {formatCardCreatedAt(getCardCreatedAt(row))}
                       </td>
                       <td className="py-3 px-4 whitespace-nowrap">
                         <StatusBadge status={row.status} />

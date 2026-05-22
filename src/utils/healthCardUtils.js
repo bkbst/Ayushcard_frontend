@@ -63,6 +63,35 @@ export function getDisplayStatus(card) {
   }
 }
 
+/** Raw created timestamp from API (ISO string or parseable date). */
+export function getCardCreatedAt(card) {
+  const raw =
+    card?.createdAt ??
+    card?.created_at ??
+    card?.applicationDate ??
+    null;
+  if (raw == null || raw === "") return null;
+  return raw;
+}
+
+/** Display: `22 May 2026, 10:45 AM` */
+export function formatCardCreatedAt(value) {
+  if (value == null || value === "") return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  const datePart = d.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+  const timePart = d.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+  return `${datePart}, ${timePart}`;
+}
+
 export function parseHealthCardsResponse(res) {
   const raw = Array.isArray(res?.data?.cards)
     ? res.data.cards
@@ -127,5 +156,6 @@ export function normalizeHealthCard(card) {
     status: getDisplayStatus(card),
     statusBucket: getStatusBucket(card),
     rawStatus: getRawStatus(card),
+    createdAt: getCardCreatedAt(card),
   };
 }

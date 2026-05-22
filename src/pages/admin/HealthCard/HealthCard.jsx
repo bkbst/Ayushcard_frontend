@@ -18,6 +18,8 @@ import {
   isApplicationCard,
   isVerifiedStatus,
   parseHealthCardsResponse,
+  formatCardCreatedAt,
+  getCardCreatedAt,
 } from "../../../utils/healthCardUtils";
 import { useToast } from "../../../components/ui/Toast";
 import Pagination from "../../../components/ui/Pagination";
@@ -299,6 +301,9 @@ const HealthCard = () => {
         } else if (sortConfig.key === "amount") {
           aValue = a.payment.totalPaid;
           bValue = b.payment.totalPaid;
+        } else if (sortConfig.key === "createdAt") {
+          aValue = new Date(getCardCreatedAt(a) || 0).getTime() || 0;
+          bValue = new Date(getCardCreatedAt(b) || 0).getTime() || 0;
         }
 
         if (aValue === undefined) aValue = "";
@@ -474,7 +479,7 @@ const HealthCard = () => {
           </div>
         ) : paginatedData.length > 0 ? (
           <div className="overflow-y-auto overflow-x-auto flex-1">
-            <table className="min-w-[980px] w-full text-left border-collapse relative">
+            <table className="min-w-[1120px] w-full text-left border-collapse relative">
               <thead className="sticky top-0 z-10 bg-[#FFFFFF]">
                 <tr>
                   <th className="py-3 px-4 w-12 text-center">
@@ -516,6 +521,12 @@ const HealthCard = () => {
                     "pincode",
                     "left",
                     "w-[120px]",
+                  )}
+                  {renderSortableHeader(
+                    "Created At",
+                    "createdAt",
+                    "left",
+                    "w-[190px]",
                   )}
                   {renderSortableHeader(
                     "Status",
@@ -569,6 +580,16 @@ const HealthCard = () => {
                       </td>
                       <td className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap">
                         {row.pincode || "—"}
+                      </td>
+                      <td
+                        className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap"
+                        title={
+                          getCardCreatedAt(row)
+                            ? String(getCardCreatedAt(row))
+                            : undefined
+                        }
+                      >
+                        {formatCardCreatedAt(getCardCreatedAt(row))}
                       </td>
                       <td className="py-3 px-4 whitespace-nowrap">
                         <StatusBadge 
