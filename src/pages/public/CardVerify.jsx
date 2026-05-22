@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import axios from "axios";
 import { MapPin, Phone, Mail, CheckCircle, XCircle, Loader2, ShieldCheck } from "lucide-react";
+import { resolveProfileImageFromCard } from "../../utils/profileImage";
 
 // Public (no-auth) axios instance — works without login
 const publicApi = axios.create({
@@ -164,10 +165,14 @@ export default function CardVerify() {
           <div className="flex gap-3 items-start">
             {/* Photo */}
             <div className="w-20 h-24 bg-white rounded-xl overflow-hidden border-2 border-black shrink-0">
-              {card.profileImage
-                ? <img src={card.profileImage} alt="profile" className="w-full h-full object-cover" />
-                : <div className="w-full h-full flex items-center justify-center bg-gray-100 text-gray-400 text-xs">No Photo</div>
-              }
+              {(() => {
+                const profileSrc = resolveProfileImageFromCard(card);
+                return profileSrc ? (
+                  <img src={profileSrc} alt="profile" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-gray-100 text-gray-400 text-xs">No Photo</div>
+                );
+              })()}
             </div>
 
             {/* Info */}

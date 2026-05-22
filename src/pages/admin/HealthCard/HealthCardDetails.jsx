@@ -5,6 +5,10 @@ import apiService from "../../../api/service";
 import AyushCardPreview from "../../../components/admin/AyushCardPreview";
 import { useToast } from "../../../components/ui/Toast";
 import { isVerifiedStatus } from "../../../utils/healthCardUtils";
+import {
+  resolveDocumentFrontFromCard,
+  resolveProfileImageFromCard,
+} from "../../../utils/profileImage";
 
 // Map API response fields → form fields
 const apiToForm = (card) => ({
@@ -45,15 +49,23 @@ const apiToForm = (card) => ({
   relatedPerson: card.relatedPerson || "",
   aadhaarNumber: card.aadhaarNumber || card.aadhaarNo || card.aadharNumber || "",
   campName: card.campId?.name || card.campName || "",
-  // For this details page, use documents[0] (first document)
-  // as the card photo.
-  profileImage:
-    card.profileImage ||
-    (Array.isArray(card.documents) && card.documents.length > 0
-      ? card.documents[2].path || card.documents[2].url
-      : ""),
-  documentFront: card.documentFront || (Array.isArray(card.documents) ? card.documents.find(d => d.name === "documentFront")?.path : "") || "",
-  documentBack: card.documentBack || (Array.isArray(card.documents) ? card.documents.find(d => d.name === "documentBack")?.path : "") || "",
+  profileImage: resolveProfileImageFromCard(card),
+  documentFront: resolveDocumentFrontFromCard(card),
+  documentBack:
+    card.documentBack ||
+    (Array.isArray(card.documents)
+      ? card.documents.find((d) => {
+          const n = String(d.name || "").toLowerCase();
+          const t = String(d.type || "").toLowerCase();
+          return (
+            n === "documentback" ||
+            n === "document_back" ||
+            t === "aadhaar_back" ||
+            t === "supporting_document"
+          );
+        })?.path
+      : "") ||
+    "",
   documents: Array.isArray(card.documents) ? card.documents : [],
   // NGO details for preview
   ngoLocation: card.ngoLocation,

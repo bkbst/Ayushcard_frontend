@@ -11,6 +11,10 @@ import {
 } from "lucide-react";
 import AyushCardPreview from "../../../components/admin/AyushCardPreview";
 import apiService from "../../../api/service";
+import {
+  resolveDocumentFrontFromCard,
+  resolveProfileImageFromCard,
+} from "../../../utils/profileImage";
 
 // Map API response fields → form fields
 const apiToForm = (card) => ({
@@ -51,14 +55,23 @@ const apiToForm = (card) => ({
   dob: card.dob || "",
   aadhaarNumber: card.aadhaarNumber || "",
   campName: card.campId?.name || card.campName || "",
-  documentFront: card.documentFront || (Array.isArray(card.documents) ? card.documents.find(d => d.name === "documentFront")?.path : "") || "",
-  documentBack: card.documentBack || (Array.isArray(card.documents) ? card.documents.find(d => d.name === "documentBack")?.path : "") || "",
- 
-  profileImage:
-    card.profileImage ||
-    (Array.isArray(card.documents) && card.documents.length > 0
-      ? card.documents[2].path || card.documents[2].url //second index is for family head
-      : ""),
+  documentFront: resolveDocumentFrontFromCard(card),
+  documentBack:
+    card.documentBack ||
+    (Array.isArray(card.documents)
+      ? card.documents.find((d) => {
+          const n = String(d.name || "").toLowerCase();
+          const t = String(d.type || "").toLowerCase();
+          return (
+            n === "documentback" ||
+            n === "document_back" ||
+            t === "aadhaar_back" ||
+            t === "supporting_document"
+          );
+        })?.path
+      : "") ||
+    "",
+  profileImage: resolveProfileImageFromCard(card),
   // NGO details for preview
   ngoLocation: card.ngoLocation || "Mangla Vihar Kanpur - 208015",
   ngoPhone: card.ngoPhone || "9927384859",

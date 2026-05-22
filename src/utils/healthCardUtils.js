@@ -1,3 +1,8 @@
+import {
+  resolveDocumentFrontFromCard,
+  resolveProfileImageFromCard,
+} from "./profileImage";
+
 /**
  * Ayush Card status buckets for list sections:
  * - applications: pending / unverified (Ayush Card Applications)
@@ -131,17 +136,8 @@ export function normalizeHealthCard(card) {
     members: Array.isArray(card.members)
       ? card.members
       : Array.from({ length: totalCount }, (_, i) => ({ id: i })),
-    profileImage:
-      card.profileImage ||
-      (Array.isArray(card.documents) && card.documents.length > 0
-        ? card.documents[2]?.path || card.documents[2]?.url
-        : ""),
-    documentFront:
-      card.documentFront ||
-      (Array.isArray(card.documents)
-        ? card.documents.find((d) => d.name === "documentFront")?.path
-        : "") ||
-      "",
+    profileImage: resolveProfileImageFromCard(card),
+    documentFront: resolveDocumentFrontFromCard(card),
     documentBack:
       card.documentBack ||
       (Array.isArray(card.documents)

@@ -2,6 +2,10 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { toJpeg } from "html-to-image";
 import AyushCardPreview from "../components/admin/AyushCardPreview";
+import {
+  resolveDocumentFrontFromCard,
+  resolveProfileImageFromCard,
+} from "./profileImage";
 
 const CARD_W = 580;
 const CARD_H = 340;
@@ -144,10 +148,6 @@ export function mapApiCardToPreviewData(card) {
     [card.firstName, card.middleName, card.lastName].filter(Boolean).join(" ");
 
   const docs = Array.isArray(card.documents) ? card.documents : [];
-  const profileFromDocs = docs.find((d) => {
-    const n = String(d.name || d.type || "").toLowerCase();
-    return n.includes("profile") || n.includes("photo") || n.includes("head");
-  });
 
   return {
     ...card,
@@ -172,18 +172,8 @@ export function mapApiCardToPreviewData(card) {
     expiryDate: formatDisplayDate(card.cardExpiredDate || card.expiryDate),
     cardExpiredDate: card.cardExpiredDate,
     campName: card.campId?.name || card.campName || "",
-    profileImage:
-      card.profileImage ||
-      profileFromDocs?.path ||
-      profileFromDocs?.url ||
-      docs[2]?.path ||
-      docs[2]?.url ||
-      "",
-    documentFront:
-      card.documentFront ||
-      docs.find((d) => d.name === "documentFront")?.path ||
-      docs.find((d) => d.type === "aadhaar_front")?.path ||
-      "",
+    profileImage: resolveProfileImageFromCard(card),
+    documentFront: resolveDocumentFrontFromCard(card),
     documents: docs,
     members: (Array.isArray(card.members) ? card.members : []).map((m) => ({
       name: m.name || m.fullName || "",

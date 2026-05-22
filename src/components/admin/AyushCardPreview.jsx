@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { MapPin, Phone, Mail } from "lucide-react";
+import { resolveProfileImageFromCard } from "../../utils/profileImage";
 
 const AyushCardPreview = ({ data, side = "front", onFlip, exportMode = false }) => {
   const BASE_WIDTH = 580;
@@ -121,56 +122,13 @@ const AyushCardPreview = ({ data, side = "front", onFlip, exportMode = false }) 
                   return false;
                 };
 
-                const pickFromDocuments = (docs) => {
-                  if (!Array.isArray(docs)) return null;
-
-                  // Prefer explicitly named profile/head photo documents first.
-                  const preferred = docs.find((doc) => {
-                    const name = String(doc?.name || doc?.type || "").toLowerCase();
-                    return (
-                      name.includes("profile") ||
-                      name.includes("photo") ||
-                      name.includes("head")
-                    );
-                  });
-                  if (preferred) {
-                    const rawPath = preferred?.path || preferred?.url || "";
-                    const mime = preferred?.mimetype || "";
-                    if (isImageLike(rawPath, mime)) {
-                      const built = getImageUrl(rawPath);
-                      if (built) return built;
-                    }
-                  }
-
-                  // Fallback to searching all image documents.
-                  for (const doc of docs) {
-                    const rawPath = doc?.path || doc?.url || "";
-                    const mime = doc?.mimetype || "";
-                    if (!isImageLike(rawPath, mime)) continue; // skip PDFs and other non-image files
-                    const built = getImageUrl(rawPath);
-                    if (built) return built;
-                  }
-                  return null;
-                };
-
                 let imgSrc = null;
+                const profilePath = resolveProfileImageFromCard(data);
 
-                // Prefer explicit profile image only if it is image-like.
-                if (isImageLike(data?.profileImage || "", data?.profileImageMime)) {
-                  imgSrc = getImageUrl(data?.profileImage);
+                if (isImageLike(profilePath, data?.profileImageMime)) {
+                  imgSrc = getImageUrl(profilePath);
                 }
 
-                // Fallback to front document if it looks like an image
-                if (!imgSrc && isImageLike(data?.documentFront || "", data?.documentFrontMime)) {
-                  imgSrc = getImageUrl(data?.documentFront);
-                }
-
-                // Finally, try documents array but skip PDFs (like doc1.pdf)
-                if (!imgSrc) {
-                  imgSrc = pickFromDocuments(data?.documents);
-                }
-
-                // As a very last fallback, use local placeholder instead of a missing backend asset
                 if (!imgSrc) {
                   imgSrc = "/gallery1.svg";
                 }

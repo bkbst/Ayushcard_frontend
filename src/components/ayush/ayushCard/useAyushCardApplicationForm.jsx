@@ -1957,6 +1957,7 @@ export function useAyushCardApplicationForm({
       address: familyHead.address,
       pincode: familyHead.pincode,
       aadhaarNumber: (familyHead.aadhaarNumber || "").replace(/\s/g, ""),
+      profileImage: headImage || "",
       cardIssueDate: today,
       cardExpiredDate: cardExpiryDate,
       verificationDate: today,
@@ -1994,7 +1995,8 @@ export function useAyushCardApplicationForm({
         headImage && {
           filename: "family_head_photo.jpg",
           originalName: "family_head_photo.jpg",
-          path: headImage, // This is already base64 now
+          name: "profilePhoto",
+          path: headImage,
           size: 0,
           mimetype: "image/jpeg",
           type: "profile_photo",
@@ -2102,6 +2104,7 @@ export function useAyushCardApplicationForm({
       address: familyHead.address || "",
       pincode: familyHead.pincode || "",
       aadhaarNumber: (familyHead.aadhaarNumber || "").replace(/\s/g, ""),
+      profileImage: headImage || "",
       cardNo: `${Math.floor(100000000000 + Math.random() * 900000000000)}`,
       cardIssueDate: today,
       cardExpiredDate: cardExpiryDate,
@@ -2138,7 +2141,9 @@ export function useAyushCardApplicationForm({
           type: "supporting_document",
         },
         headImage && {
-          name: "family_head_photo.jpg",
+          name: "profilePhoto",
+          filename: "family_head_photo.jpg",
+          originalName: "family_head_photo.jpg",
           path: headImage,
           type: "profile_photo",
         },
@@ -2534,7 +2539,7 @@ export function useAyushCardApplicationForm({
       };
     }),
     documentFront: docFront?.base64 || docFront?.url || "",
-    profileImage: headImage || docFront?.base64 || docFront?.url || "",
+    profileImage: headImage || "",
     payment: {
       totalPaid: estimatedFee,
     },
