@@ -3,6 +3,7 @@
  */
 
 import { OcrImageError } from "./ocrUploadImage.js";
+import { isValidAadhaarName } from "./ocr.js";
 
 export { OcrImageError };
 
@@ -34,6 +35,18 @@ export function normalizeOcrDobForDateInput(dob) {
   }
 
   return "";
+}
+
+/** Member / API autofill — trust server OCR names with light validation. */
+export function acceptOcrNameForAutofill(name, source = "api") {
+  const t = String(name || "")
+    .trim()
+    .replace(/\s+/g, " ");
+  if (!t || t.length < 3 || t.length > 80) return "";
+  if (!/^[A-Za-z]+(?:\s+[A-Za-z]+){0,4}$/.test(t)) return "";
+
+  if (source === "api") return t;
+  return isValidAadhaarName(t) ? t : "";
 }
 
 export function mapFrontOcrApiResponse(raw) {

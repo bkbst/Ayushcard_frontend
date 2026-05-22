@@ -33,6 +33,41 @@ const SHORT_NAME_ALLOWLIST = new Set([
   "aj",
 ]);
 
+/** Common Indian name tokens that fail consonant-cluster heuristics (e.g. Singh → sngh). */
+const COMMON_NAME_WORD_ALLOWLIST = new Set([
+  "singh",
+  "kaur",
+  "kumar",
+  "devi",
+  "sharma",
+  "verma",
+  "gupta",
+  "yadav",
+  "patel",
+  "reddy",
+  "naidu",
+  "rao",
+  "thakur",
+  "chauhan",
+  "mishra",
+  "pandey",
+  "tiwari",
+  "joshi",
+  "agarwal",
+  "malik",
+  "sheikh",
+  "syed",
+  "ansari",
+  "qureshi",
+  "bhatt",
+  "mehta",
+  "shah",
+  "iyer",
+  "menon",
+  "nair",
+  "pillai",
+]);
+
 const GARBAGE_NAME_WORDS = new Set([
   "em",
   "wr",
@@ -265,9 +300,11 @@ function nameWordLooksReal(word) {
     return SHORT_NAME_ALLOWLIST.has(lower);
   }
 
+  if (COMMON_NAME_WORD_ALLOWLIST.has(lower)) return true;
+
   if (!/[aeiouAEIOU]/.test(w)) return false;
 
-  const consonantRun = lower.replace(/[aeiouy]/g, "").match(/[bcdfghjklmnpqrstvwxz]{4,}/);
+  const consonantRun = lower.replace(/[aeiouy]/g, "").match(/[bcdfghjklmnpqrstvwxz]{5,}/);
   if (consonantRun) return false;
 
   if (w.length >= 3 && /^[bcdfghjklmnpqrstvwxyz]{2,}$/i.test(w)) return false;

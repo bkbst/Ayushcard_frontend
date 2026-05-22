@@ -8,6 +8,7 @@ import {
 } from "../../../utils/ocr";
 import {
   mapFrontOcrApiResponse,
+  acceptOcrNameForAutofill,
   normalizeOcrDobForDateInput,
   mapBackOcrApiResponse,
   getOcrApiErrorMessage,
@@ -1714,7 +1715,8 @@ export function useAyushCardApplicationForm({
     return true;
   };
 
-  const isLikelyMemberName = (s) => isValidAadhaarName(s);
+  const isLikelyMemberName = (s, source = "api") =>
+    acceptOcrNameForAutofill(s, source) || isValidAadhaarName(s);
 
   const getNameConfidenceScore = (s) => {
     if (!s) return 0;
@@ -1827,7 +1829,10 @@ export function useAyushCardApplicationForm({
         storageBase64 = await compressBase64Image(base64Src, 1200, 1200, 0.7);
       } catch (e) {}
 
-      const nextName = isLikelyMemberName(details.name) ? details.name : "";
+      const nextName = isLikelyMemberName(details.name, details.source)
+        ? acceptOcrNameForAutofill(details.name, details.source) ||
+          String(details.name || "").trim()
+        : "";
       const nextDocId =
         details?.type === "aadhaar"
           ? isLikelyMemberDocId(details.docNumber)
