@@ -74,7 +74,7 @@ const apiToForm = (card) => ({
   profileImage: resolveProfileImageFromCard(card),
   // NGO details for preview
   ngoLocation: card.ngoLocation || "Mangla Vihar Kanpur - 208015",
-  ngoPhone: card.ngoPhone || "9927384859",
+  ngoPhone: card.ngoPhone || "8303902030",
   ngoEmail: card.ngoEmail || "baijnaathkesarbaisewatrust9625@gmail.com",
 });
 

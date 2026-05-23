@@ -122,7 +122,7 @@ export default function CardVerify() {
   const isVerified = s === "approved" || s === "active" || s === "verified";
   const cardNo    = card.applicationId || card._id || cardId;
   const ngoLocation = card.ngoLocation || "Mangla Vihar Kanpur - 208015";
-  const ngoPhone    = card.ngoPhone    || "9927384859";
+  const ngoPhone    = card.ngoPhone    || "8303902030";
   const ngoEmail    = card.ngoEmail    || "baijnaathkesarbaisewatrust9625@gmail.com";
 
   return (
