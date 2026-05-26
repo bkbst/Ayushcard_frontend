@@ -2429,22 +2429,41 @@ export function useAyushCardApplicationForm({
     if (currentStep === 2) {
       for (let i = 0; i < members.length; i++) {
         const p = members[i];
-        if (!p.fullName || !p.relation || !p.age) {
-          toastWarn(`Please fill all details for Member ${i + 1}`);
-          return;
-        }
-        const pType = p.documentType || "Aadhaar";
-        if (
-          pType === "Aadhaar" &&
-          (p.documentId || "").replace(/\D/g, "").length < 8
-        ) {
+        const memberFullName = String(p.fullName || "").trim();
+        const memberRelation = String(p.relation || "").trim();
+        const memberAgeRaw = String(p.age || "").trim();
+        const memberDocType = String(p.documentType || "").trim();
+        const memberDocIdRaw = String(p.documentId || "").trim();
+
+        const missingFields = [];
+        if (!memberFullName) missingFields.push("Full Name");
+        if (!memberRelation) missingFields.push("Relation");
+        if (!memberAgeRaw) missingFields.push("Age");
+        if (!memberDocType) missingFields.push("Document Type");
+        if (!memberDocIdRaw) missingFields.push("Document ID");
+
+        if (missingFields.length > 0) {
+          setActiveMemberTab(i + 1);
           toastWarn(
-            `Please enter a valid Aadhaar ID for Member ${i + 1}`,
+            `Member ${i + 1}: Please fill ${missingFields.join(", ")}.`,
           );
           return;
-        } else if (pType !== "Aadhaar" && !(p.documentId || "").trim()) {
-          toastWarn(`Please enter a valid Document ID for Member ${i + 1}`);
+        }
+
+        const memberAge = parseInt(memberAgeRaw, 10);
+        if (Number.isNaN(memberAge) || memberAge <= 0) {
+          setActiveMemberTab(i + 1);
+          toastWarn(`Member ${i + 1}: Please enter a valid Age.`);
           return;
+        }
+
+        if (memberDocType === "Aadhaar") {
+          const aadhaarDigits = memberDocIdRaw.replace(/\D/g, "");
+          if (aadhaarDigits.length !== 12) {
+            setActiveMemberTab(i + 1);
+            toastWarn(`Member ${i + 1}: Aadhaar must be 12 digits.`);
+            return;
+          }
         }
       }
     }
