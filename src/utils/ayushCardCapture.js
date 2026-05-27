@@ -101,6 +101,46 @@ function renderToSlot(slot, cardData, side) {
   );
 }
 
+/* ── Convert a profile image URL to a base64 data URL ── */
+const imageDataUrlCache = new Map();
+
+async function toDataUrl(imagePath) {
+  if (!imagePath || typeof imagePath !== "string") return "";
+  if (imagePath.startsWith("data:")) return imagePath;
+
+  // Build fetch URL: use relative path for /uploads (Vite proxies it)
+  let fetchUrl = imagePath;
+  if (!imagePath.startsWith("http") && !imagePath.startsWith("/")) {
+    fetchUrl = "/" + imagePath;
+  }
+  if (imagePath.startsWith("/uploads") || imagePath.startsWith("/")) {
+    // relative — works via Vite proxy
+    fetchUrl = imagePath;
+  } else if (!imagePath.startsWith("http")) {
+    const base = import.meta.env.VITE_API_URL || "https://bkbsbackend-production.up.railway.app";
+    fetchUrl = `${base.replace(/\/$/, "")}/${imagePath}`;
+  }
+
+  if (imageDataUrlCache.has(fetchUrl)) return imageDataUrlCache.get(fetchUrl);
+
+  try {
+    const resp = await fetch(fetchUrl);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const blob = await resp.blob();
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    imageDataUrlCache.set(fetchUrl, dataUrl);
+    return dataUrl;
+  } catch (err) {
+    console.warn("[capture] Failed to prefetch image:", fetchUrl, err);
+    return "";
+  }
+}
+
 /** Render AyushCardPreview off-screen and return a JPEG data URL. */
 export async function captureAyushCardPreview(cardData, side = "front", options = {}) {
   const slotIndex = options.slotIndex ?? 0;
@@ -116,7 +156,22 @@ export async function captureAyushCardPreview(cardData, side = "front", options 
   slot.busy = true;
 
   try {
-    renderToSlot(slot, cardData, side);
+    // Pre-fetch profile image as data URL to avoid CORS in html-to-image
+    const profilePath = resolveProfileImageFromCard(cardData);
+    let enrichedData = cardData;
+    if (profilePath) {
+      const dataUrl = await toDataUrl(profilePath);
+      if (dataUrl) {
+        enrichedData = {
+          ...cardData,
+          profilePic: dataUrl,
+          profileImage: dataUrl,
+          profilePhoto: dataUrl,
+        };
+      }
+    }
+
+    renderToSlot(slot, enrichedData, side);
     await settleAfterRender(slot.host);
     return await toJpeg(slot.host, jpegOpts);
   } catch (err) {
@@ -172,6 +227,7 @@ export function mapApiCardToPreviewData(card) {
     expiryDate: formatDisplayDate(card.cardExpiredDate || card.expiryDate),
     cardExpiredDate: card.cardExpiredDate,
     campName: card.campId?.name || card.campName || "",
+    profilePic: card.profilePic || "",
     profileImage: resolveProfileImageFromCard(card),
     documentFront: resolveDocumentFrontFromCard(card),
     documents: docs,

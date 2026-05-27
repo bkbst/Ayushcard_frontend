@@ -104,7 +104,10 @@ const AyushCardPreview = ({ data, side = "front", onFlip, exportMode = false }) 
                   if (typeof url !== "string") return null;
                   if (url.startsWith("data:") || url.startsWith("http") || url.startsWith("blob:")) return url;
 
-                  let baseUrl = import.meta.env.VITE_API_BASE_URL || "";
+                  // On localhost, Vite proxies /uploads/* — use relative path to avoid CORS
+                  if (url.startsWith("/uploads")) return url;
+
+                  let baseUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || "";
                   if (!baseUrl && window.location.hostname === "localhost") {
                     baseUrl = "https://bkbsbackend-production.up.railway.app";
                   }

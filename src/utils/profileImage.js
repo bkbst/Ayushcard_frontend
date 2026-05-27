@@ -49,7 +49,7 @@ export function resolveProfileImageFromCard(card) {
   if (!card) return "";
 
   const direct =
-    card.profileImage || card.profilePhoto || card.headImage || "";
+    card.profilePic || card.profileImage || card.profilePhoto || card.headImage || "";
   if (String(direct).trim()) return direct;
 
   const profileDoc = findProfileDocument(card.documents);
