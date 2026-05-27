@@ -200,7 +200,7 @@ const AyushCardPreview = ({ data, side = "front", onFlip, exportMode = false }) 
           </span>
           <span className="flex items-center gap-1">
             <Phone size={12} className="inline mr-1 shrink-0" />{" "}
-            <span className="truncate">{data?.ngoPhone || "9927384859"}</span>
+            <span className="truncate">{data?.ngoPhone || "8303902030"}</span>
           </span>
           <span className="flex items-center gap-1">
             <Mail size={12} className="inline mr-1 shrink-0" />{" "}
@@ -378,7 +378,7 @@ const AyushCardPreview = ({ data, side = "front", onFlip, exportMode = false }) 
             </span>
             <span className="flex items-center gap-1 drop-shadow-sm">
               <Phone size={12} strokeWidth={2.5} className="inline mb-0.5" />{" "}
-              {data?.ngoPhone || "9927384859"}
+              {data?.ngoPhone || "8303902030"}
             </span>
           </div>
         </div>
