@@ -1945,103 +1945,142 @@ export function useAyushCardApplicationForm({
       familyHead.fullName,
     );
 
-    const payload = {
-      applicationDate: today,
-      status: "pending",
-      firstName,
-      middleName,
-      lastName,
-      contact: familyHead.contactNumber,
-      alternateContact: familyHead.alternateContact || "",
-      email: familyHead.emailAddress,
-      relation: familyHead.relation,
-      relatedPerson: familyHead.relatedPerson,
-      religion: familyHead.religion || "",
-      gender: familyHead.gender,
-      dob: familyHead.dob,
-      address: familyHead.address,
-      pincode: familyHead.pincode,
-      aadhaarNumber: (familyHead.aadhaarNumber || "").replace(/\s/g, ""),
-      profileImage: headImage || "",
-      cardIssueDate: today,
-      cardExpiredDate: cardExpiryDate,
-      verificationDate: today,
-      totalMembers: 1 + members.length,
-      totalMember: 1 + members.length,
-      totalAmount: estimatedFee,
-      documents: [
-        docFront && {
-          filename: docFront.name,
-          originalName: docFront.name,
-          path: docFront.base64 || docFront.url,
-          size: 0,
-          mimetype: "image/jpeg",
-          type: "aadhaar_front",
-          uploadedAt: new Date().toISOString(),
-        },
-        docAadhaarBack && {
-          filename: docAadhaarBack.name,
-          originalName: docAadhaarBack.name,
-          path: docAadhaarBack.base64 || docAadhaarBack.url,
-          size: 0,
-          mimetype: "image/jpeg",
-          type: "aadhaar_back",
-          uploadedAt: new Date().toISOString(),
-        },
-        docBack && {
-          filename: docBack.name,
-          originalName: docBack.name,
-          path: docBack.base64 || docBack.url,
-          size: 0,
-          mimetype: "image/jpeg",
-          type: "supporting_document",
-          uploadedAt: new Date().toISOString(),
-        },
-        headImage && {
-          filename: "family_head_photo.jpg",
-          originalName: "family_head_photo.jpg",
-          name: "profilePhoto",
-          path: headImage,
-          size: 0,
-          mimetype: "image/jpeg",
-          type: "profile_photo",
-          uploadedAt: new Date().toISOString(),
-        },
-        paymentScreenshot && {
-          filename: paymentScreenshot.name,
-          originalName: paymentScreenshot.name,
-          path: paymentScreenshot.base64 || paymentScreenshot.url,
-          size: 0,
-          mimetype: "image/jpeg",
-          type: "payment_screenshot",
-          uploadedAt: new Date().toISOString(),
-        },
-      ].filter(Boolean),
-      isPrint: false,
-      members: members.map((m) => {
-        const docType = m.documentType || "Aadhaar";
-        let docId = m.documentId || "";
-        if (docType === "Aadhaar") docId = (docId || "").replace(/\s/g, "");
-        return {
-          name: m.fullName,
-          relation: m.relation || "Family Member",
-          age: parseInt(m.age) || 0,
-          documentId: docId,
-          documentType: docType,
-        };
-      }),
-      payment: {
-        transactionId: finalTxnId,
-        method: "online",
-        totalAmount: estimatedFee,
-        date: new Date().toISOString(),
-        orderId: orderId || "",
-      },
-      campId: (localStorage.getItem("userRole") || sessionStorage.getItem("userRole")) === "Employee" ? (todayCampId || "") : "",
-    };
-
     try {
       setSubmitting(true);
+
+      // Upload base64 helper
+      const uploadAsset = async (base64Data, filename, folder) => {
+        if (!base64Data || !base64Data.startsWith("data:")) return base64Data;
+        try {
+          const res = await apiService.uploadBase64(base64Data, filename, folder);
+          return res.data.path;
+        } catch (err) {
+          console.error(`Failed to upload ${filename}:`, err);
+          throw new Error(`Failed to upload ${filename}. Please try again.`);
+        }
+      };
+
+      // Upload all base64 documents first
+      let uploadedDocFrontUrl = docFront?.base64 || docFront?.url || "";
+      if (uploadedDocFrontUrl.startsWith("data:")) {
+        uploadedDocFrontUrl = await uploadAsset(uploadedDocFrontUrl, docFront?.name || "documentFront.jpg", "card-documents");
+      }
+
+      let uploadedDocAadhaarBackUrl = docAadhaarBack?.base64 || docAadhaarBack?.url || "";
+      if (uploadedDocAadhaarBackUrl.startsWith("data:")) {
+        uploadedDocAadhaarBackUrl = await uploadAsset(uploadedDocAadhaarBackUrl, docAadhaarBack?.name || "aadhaarBack.jpg", "card-documents");
+      }
+
+      let uploadedDocBackUrl = docBack?.base64 || docBack?.url || "";
+      if (uploadedDocBackUrl.startsWith("data:")) {
+        uploadedDocBackUrl = await uploadAsset(uploadedDocBackUrl, docBack?.name || "documentBack.jpg", "card-documents");
+      }
+
+      let uploadedHeadImageUrl = headImage || "";
+      if (uploadedHeadImageUrl.startsWith("data:")) {
+        uploadedHeadImageUrl = await uploadAsset(uploadedHeadImageUrl, "family_head_photo.jpg", "profile-photos");
+      }
+
+      let uploadedPaymentScreenshotUrl = paymentScreenshot?.base64 || paymentScreenshot?.url || "";
+      if (uploadedPaymentScreenshotUrl.startsWith("data:")) {
+        uploadedPaymentScreenshotUrl = await uploadAsset(uploadedPaymentScreenshotUrl, paymentScreenshot?.name || "payment_screenshot.jpg", "payments");
+      }
+
+      const payload = {
+        applicationDate: today,
+        status: "pending",
+        firstName,
+        middleName,
+        lastName,
+        contact: familyHead.contactNumber,
+        alternateContact: familyHead.alternateContact || "",
+        email: familyHead.emailAddress,
+        relation: familyHead.relation,
+        relatedPerson: familyHead.relatedPerson,
+        religion: familyHead.religion || "",
+        gender: familyHead.gender,
+        dob: familyHead.dob,
+        address: familyHead.address,
+        pincode: familyHead.pincode,
+        aadhaarNumber: (familyHead.aadhaarNumber || "").replace(/\s/g, ""),
+        profileImage: uploadedHeadImageUrl,
+        cardIssueDate: today,
+        cardExpiredDate: cardExpiryDate,
+        verificationDate: today,
+        totalMembers: 1 + members.length,
+        totalMember: 1 + members.length,
+        totalAmount: estimatedFee,
+        documents: [
+          docFront && {
+            filename: docFront.name,
+            originalName: docFront.name,
+            path: uploadedDocFrontUrl,
+            size: 0,
+            mimetype: "image/jpeg",
+            type: "aadhaar_front",
+            uploadedAt: new Date().toISOString(),
+          },
+          docAadhaarBack && {
+            filename: docAadhaarBack.name,
+            originalName: docAadhaarBack.name,
+            path: uploadedDocAadhaarBackUrl,
+            size: 0,
+            mimetype: "image/jpeg",
+            type: "aadhaar_back",
+            uploadedAt: new Date().toISOString(),
+          },
+          docBack && {
+            filename: docBack.name,
+            originalName: docBack.name,
+            path: uploadedDocBackUrl,
+            size: 0,
+            mimetype: "image/jpeg",
+            type: "supporting_document",
+            uploadedAt: new Date().toISOString(),
+          },
+          uploadedHeadImageUrl && {
+            filename: "family_head_photo.jpg",
+            originalName: "family_head_photo.jpg",
+            name: "profilePhoto",
+            path: uploadedHeadImageUrl,
+            size: 0,
+            mimetype: "image/jpeg",
+            type: "profile_photo",
+            uploadedAt: new Date().toISOString(),
+          },
+          paymentScreenshot && {
+            filename: paymentScreenshot.name,
+            originalName: paymentScreenshot.name,
+            path: uploadedPaymentScreenshotUrl,
+            size: 0,
+            mimetype: "image/jpeg",
+            type: "payment_screenshot",
+            uploadedAt: new Date().toISOString(),
+          },
+        ].filter(Boolean),
+        isPrint: false,
+        members: members.map((m) => {
+          const docType = m.documentType || "Aadhaar";
+          let docId = m.documentId || "";
+          if (docType === "Aadhaar") docId = (docId || "").replace(/\s/g, "");
+          return {
+            name: m.fullName,
+            relation: m.relation || "Family Member",
+            age: parseInt(m.age) || 0,
+            documentId: docId,
+            documentType: docType,
+          };
+        }),
+        payment: {
+          transactionId: finalTxnId,
+          method: "online",
+          totalAmount: estimatedFee,
+          date: new Date().toISOString(),
+          orderId: orderId || "",
+        },
+        campId: (localStorage.getItem("userRole") || sessionStorage.getItem("userRole")) === "Employee" ? (todayCampId || "") : "",
+      };
+
       const apiRes = await apiService.submitCardApplication(payload);
       const created = extractCreatedCardRecord(apiRes);
       submissionCompletedRef.current = true;
@@ -2077,7 +2116,8 @@ export function useAyushCardApplicationForm({
     }
   };
 
-  const buildStaffHealthCardPayload = () => {
+
+  const buildStaffHealthCardPayload = (uploadedUrls = {}) => {
     const totalMembersCount = 1 + members.length;
     const fee = computeAyushCardFeeRupees(totalMembersCount);
     const today = new Date().toISOString().split("T")[0];
@@ -2109,7 +2149,7 @@ export function useAyushCardApplicationForm({
       address: familyHead.address || "",
       pincode: familyHead.pincode || "",
       aadhaarNumber: (familyHead.aadhaarNumber || "").replace(/\s/g, ""),
-      profileImage: headImage || "",
+      profileImage: uploadedUrls.headImage || headImage || "",
       cardNo: `${Math.floor(100000000000 + Math.random() * 900000000000)}`,
       cardIssueDate: today,
       cardExpiredDate: cardExpiryDate,
@@ -2132,30 +2172,30 @@ export function useAyushCardApplicationForm({
       documents: [
         docFront && {
           name: "documentFront",
-          path: docFront.base64 || docFront.url,
+          path: uploadedUrls.docFront || docFront.base64 || docFront.url,
           type: "image",
         },
         docAadhaarBack && {
           name: "aadhaarBack",
-          path: docAadhaarBack.base64 || docAadhaarBack.url,
+          path: uploadedUrls.docAadhaarBack || docAadhaarBack.base64 || docAadhaarBack.url,
           type: "aadhaar_back",
         },
         docBack && {
           name: "documentBack",
-          path: docBack.base64 || docBack.url,
+          path: uploadedUrls.docBack || docBack.base64 || docBack.url,
           type: "supporting_document",
         },
-        headImage && {
+        (uploadedUrls.headImage || headImage) && {
           name: "profilePhoto",
           filename: "family_head_photo.jpg",
           originalName: "family_head_photo.jpg",
-          path: headImage,
+          path: uploadedUrls.headImage || headImage,
           type: "profile_photo",
         },
         staffPaymentMode === "cash" &&
-          staffCashReceiptImage && {
+          (uploadedUrls.staffCashReceiptImage || staffCashReceiptImage) && {
             name: "cashPaymentReceipt",
-            path: staffCashReceiptImage,
+            path: uploadedUrls.staffCashReceiptImage || staffCashReceiptImage,
             type: "payment_screenshot",
           },
       ].filter(Boolean),
@@ -2181,9 +2221,42 @@ export function useAyushCardApplicationForm({
     if (submissionCompletedRef.current) return;
     if (!(await ensureRegistrationValid())) return;
 
-    const payload = buildStaffHealthCardPayload();
     try {
       setSubmitting(true);
+
+      // Upload base64 helper
+      const uploadAsset = async (base64Data, filename, folder) => {
+        if (!base64Data || !base64Data.startsWith("data:")) return base64Data;
+        try {
+          const res = await apiService.uploadBase64(base64Data, filename, folder);
+          return res.data.path;
+        } catch (err) {
+          console.error(`Failed to upload ${filename}:`, err);
+          throw new Error(`Failed to upload ${filename}. Please try again.`);
+        }
+      };
+
+      // Upload staff base64 assets first
+      const uploadedUrls = {};
+
+      if (docFront?.base64 && docFront.base64.startsWith("data:")) {
+        uploadedUrls.docFront = await uploadAsset(docFront.base64, docFront.name || "documentFront.jpg", "card-documents");
+      }
+      if (docAadhaarBack?.base64 && docAadhaarBack.base64.startsWith("data:")) {
+        uploadedUrls.docAadhaarBack = await uploadAsset(docAadhaarBack.base64, docAadhaarBack.name || "aadhaarBack.jpg", "card-documents");
+      }
+      if (docBack?.base64 && docBack.base64.startsWith("data:")) {
+        uploadedUrls.docBack = await uploadAsset(docBack.base64, docBack.name || "documentBack.jpg", "card-documents");
+      }
+      if (headImage && headImage.startsWith("data:")) {
+        uploadedUrls.headImage = await uploadAsset(headImage, "family_head_photo.jpg", "profile-photos");
+      }
+      if (staffPaymentMode === "cash" && staffCashReceiptImage && staffCashReceiptImage.startsWith("data:")) {
+        uploadedUrls.staffCashReceiptImage = await uploadAsset(staffCashReceiptImage, "cashPaymentReceipt.jpg", "payments");
+      }
+
+      const payload = buildStaffHealthCardPayload(uploadedUrls);
+
       let apiRes;
       if (onStaffSubmit) {
         apiRes = await onStaffSubmit(payload);

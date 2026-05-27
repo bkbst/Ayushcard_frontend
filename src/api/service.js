@@ -743,9 +743,53 @@ const apiService = {
         return postAadhaarOcrMultipart('/api/ocr/aadhaar/back', imageFile, 'aadhaar_back.jpg');
     },
 
+    // ─── FILE UPLOAD ──────────────────────────────────────────────────────────
+
+    /**
+     * Upload a single file using multipart/form-data
+     */
+    uploadFile: async (file, folder = 'general') => {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        // Use publicApi to allow unauthenticated/public card creations to also upload files
+        const response = await publicApi.post(`/api/upload/single?folder=${folder}`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        return response.data;
+    },
+
+    /**
+     * Convert base64 Data URI to File and upload it
+     */
+    uploadBase64: async (base64Data, filename = 'image.jpg', folder = 'general') => {
+        if (!base64Data) return null;
+        if (!base64Data.startsWith('data:')) {
+            // Already a URL or absolute path, no need to upload
+            return { data: { path: base64Data } };
+        }
+        
+        try {
+            const arr = base64Data.split(',');
+            const mime = arr[0].match(/:(.*?);/)[1];
+            const bstr = atob(arr[1]);
+            let n = bstr.length;
+            const u8arr = new Uint8Array(n);
+            while (n--) {
+                u8arr[n] = bstr.charCodeAt(n);
+            }
+            const file = new File([u8arr], filename, { type: mime });
+            return await apiService.uploadFile(file, folder);
+        } catch (error) {
+            console.error('Error parsing base64 string:', error);
+            throw new Error('Failed to convert base64 image');
+        }
+    },
+
     logout: () => {
         storage.clear();
     },
 };
 
 export default apiService;
+
