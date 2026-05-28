@@ -6,6 +6,9 @@ const AyushCardPreview = ({ data, side = "front", onFlip, exportMode = false }) 
   const BASE_WIDTH = 580;
   const BASE_HEIGHT = 340;
 
+  const displayCardId =
+    data?.applicationId || data?.id || data?.cardNo || data?._id || data?.card_id || "—";
+
   const [isFlipped, setIsFlipped] = useState(side === "back");
   const [previewScale, setPreviewScale] = useState(1);
   const wrapperRef = useRef(null);
@@ -81,7 +84,7 @@ const AyushCardPreview = ({ data, side = "front", onFlip, exportMode = false }) 
                   <h2 className="text-[16px] font-bold">BAI SEWA TRUST</h2>
                 </div>
                 <p className="text-[11px]">
-                  Card ID: {data?.applicationId}
+                  Card ID: {displayCardId}
                 </p>
               </div>
             </div>
@@ -178,7 +181,8 @@ const AyushCardPreview = ({ data, side = "front", onFlip, exportMode = false }) 
 
             <div className="w-[115px] bg-white rounded-xl p-2 flex items-center justify-center">
               {(() => {
-                const cardId = data?.applicationId || data?.cardNo || data?._id || data?.id || "unknown";
+                const cardId =
+                  data?.applicationId || data?.id || data?.cardNo || data?._id || "unknown";
                 const verifyUrl = `${window.location.origin}/verify/${encodeURIComponent(cardId)}`;
                 return (
                   <img
@@ -264,7 +268,7 @@ const AyushCardPreview = ({ data, side = "front", onFlip, exportMode = false }) 
                   </div>
                   <p className="text-[8px] m-0 font-medium">
                     Card ID:{" "}
-                    {data?.applicationId || "—"}
+                    {displayCardId}
                   </p>  
                 </div>
               </div>
