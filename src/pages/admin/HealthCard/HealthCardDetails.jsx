@@ -572,7 +572,7 @@ const HealthCardDetails = () => {
           <div className="border border-[#E2E8F0] rounded-xl p-4 sm:p-6 bg-white flex flex-col gap-4">
             <div>
               <h3 className="font-bold text-[15px] text-[#22333B]">Document Upload</h3>
-              <p className="text-[13px] text-[#6D6D6D] mt-1">Upload supporting documents (Aadhar, photo, etc.)</p>
+              <p className="text-[13px] text-[#6D6D6D] mt-1">Upload supporting documents (Aadhaar, photo, etc.)</p>
             </div>
 
             {/* Drop zone */}
