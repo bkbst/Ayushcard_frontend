@@ -191,6 +191,7 @@ const HealthCard = () => {
       };
       if (search) params.search = search;
       if (createdAt) params.createdAt = createdAt;
+      params.sort = "-createdAt";
       if (activeFilter === "Not Verified") {
         params.status = "pending";
       } else if (activeFilter === "Verified") {
