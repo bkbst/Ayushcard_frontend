@@ -68,6 +68,8 @@ export function resolveDocumentFrontFromCard(card) {
     const name = String(doc.name || "").toLowerCase();
     return (
       type === "aadhaar_front" ||
+      name === "aadhaarfront" ||
+      name === "aadhaar_front" ||
       name === "documentfront" ||
       name === "document_front"
     );

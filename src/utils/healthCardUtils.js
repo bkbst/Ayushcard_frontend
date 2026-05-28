@@ -140,8 +140,9 @@ export function normalizeHealthCard(card) {
     documentFront: resolveDocumentFrontFromCard(card),
     documentBack:
       card.documentBack ||
+      card.secondDocument ||
       (Array.isArray(card.documents)
-        ? card.documents.find((d) => d.name === "documentBack")?.path
+        ? card.documents.find((d) => d.name === "documentBack" || d.name === "secondDocument" || d.name === "second_document")?.path
         : "") ||
       "",
     payment: {

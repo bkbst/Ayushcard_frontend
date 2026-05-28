@@ -53,6 +53,7 @@ const apiToForm = (card) => ({
   documentFront: resolveDocumentFrontFromCard(card),
   documentBack:
     card.documentBack ||
+    card.secondDocument ||
     (Array.isArray(card.documents)
       ? card.documents.find((d) => {
           const n = String(d.name || "").toLowerCase();
@@ -60,6 +61,8 @@ const apiToForm = (card) => ({
           return (
             n === "documentback" ||
             n === "document_back" ||
+            n === "seconddocument" ||
+            n === "second_document" ||
             t === "aadhaar_back" ||
             t === "supporting_document"
           );

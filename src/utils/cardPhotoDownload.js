@@ -107,8 +107,21 @@ function isSkippedDoc(doc) {
 function classifyAadhaarSide(doc) {
   if (!doc || isSkippedDoc(doc)) return null;
   const { name, type } = docLabels(doc);
-  if (type === "aadhaar_front" || name === "documentfront") return "front";
-  if (type === "aadhaar_back" || name === "aadhaarback") return "back";
+  if (
+    type === "aadhaar_front" ||
+    name === "documentfront" ||
+    name === "aadhaarfront" ||
+    name === "aadhaar_front"
+  ) {
+    return "front";
+  }
+  if (
+    type === "aadhaar_back" ||
+    name === "aadhaarback" ||
+    name === "aadhaar_back"
+  ) {
+    return "back";
+  }
   return null;
 }
 

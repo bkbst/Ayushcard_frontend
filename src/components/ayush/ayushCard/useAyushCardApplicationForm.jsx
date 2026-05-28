@@ -1963,7 +1963,7 @@ export function useAyushCardApplicationForm({
       // Upload all base64 documents first
       let uploadedDocFrontUrl = docFront?.base64 || docFront?.url || "";
       if (uploadedDocFrontUrl.startsWith("data:")) {
-        uploadedDocFrontUrl = await uploadAsset(uploadedDocFrontUrl, docFront?.name || "documentFront.jpg", "card-documents");
+        uploadedDocFrontUrl = await uploadAsset(uploadedDocFrontUrl, docFront?.name || "aadhaarFront.jpg", "card-documents");
       }
 
       let uploadedDocAadhaarBackUrl = docAadhaarBack?.base64 || docAadhaarBack?.url || "";
@@ -1973,7 +1973,7 @@ export function useAyushCardApplicationForm({
 
       let uploadedDocBackUrl = docBack?.base64 || docBack?.url || "";
       if (uploadedDocBackUrl.startsWith("data:")) {
-        uploadedDocBackUrl = await uploadAsset(uploadedDocBackUrl, docBack?.name || "documentBack.jpg", "card-documents");
+        uploadedDocBackUrl = await uploadAsset(uploadedDocBackUrl, docBack?.name || "secondDocument.jpg", "card-documents");
       }
 
       let uploadedHeadImageUrl = headImage || "";
@@ -2012,6 +2012,7 @@ export function useAyushCardApplicationForm({
         totalAmount: estimatedFee,
         documents: [
           docFront && {
+            name: "aadhaarFront",
             filename: docFront.name,
             originalName: docFront.name,
             path: uploadedDocFrontUrl,
@@ -2030,6 +2031,7 @@ export function useAyushCardApplicationForm({
             uploadedAt: new Date().toISOString(),
           },
           docBack && {
+            name: "secondDocument",
             filename: docBack.name,
             originalName: docBack.name,
             path: uploadedDocBackUrl,
@@ -2171,9 +2173,9 @@ export function useAyushCardApplicationForm({
       }),
       documents: [
         docFront && {
-          name: "documentFront",
+          name: "aadhaarFront",
           path: uploadedUrls.docFront || docFront.base64 || docFront.url,
-          type: "image",
+          type: "aadhaar_front",
         },
         docAadhaarBack && {
           name: "aadhaarBack",
@@ -2181,7 +2183,7 @@ export function useAyushCardApplicationForm({
           type: "aadhaar_back",
         },
         docBack && {
-          name: "documentBack",
+          name: "secondDocument",
           path: uploadedUrls.docBack || docBack.base64 || docBack.url,
           type: "supporting_document",
         },
@@ -2240,13 +2242,13 @@ export function useAyushCardApplicationForm({
       const uploadedUrls = {};
 
       if (docFront?.base64 && docFront.base64.startsWith("data:")) {
-        uploadedUrls.docFront = await uploadAsset(docFront.base64, docFront.name || "documentFront.jpg", "card-documents");
+        uploadedUrls.docFront = await uploadAsset(docFront.base64, docFront.name || "aadhaarFront.jpg", "card-documents");
       }
       if (docAadhaarBack?.base64 && docAadhaarBack.base64.startsWith("data:")) {
         uploadedUrls.docAadhaarBack = await uploadAsset(docAadhaarBack.base64, docAadhaarBack.name || "aadhaarBack.jpg", "card-documents");
       }
       if (docBack?.base64 && docBack.base64.startsWith("data:")) {
-        uploadedUrls.docBack = await uploadAsset(docBack.base64, docBack.name || "documentBack.jpg", "card-documents");
+        uploadedUrls.docBack = await uploadAsset(docBack.base64, docBack.name || "secondDocument.jpg", "card-documents");
       }
       if (headImage && headImage.startsWith("data:")) {
         uploadedUrls.headImage = await uploadAsset(headImage, "family_head_photo.jpg", "profile-photos");
