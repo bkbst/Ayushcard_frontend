@@ -295,7 +295,6 @@ const HealthCard = () => {
         page: currentPage,
         limit: itemsPerPage,
       };
-      if (search) params.search = search;
       if (createdAt) params.createdAt = createdAt;
       params.sort = "-createdAt";
       if (activeFilter === "Not Verified") {
@@ -439,12 +438,57 @@ const HealthCard = () => {
     return result;
   }, [healthCards, sortConfig]);
 
+  const getCardKey = (card) =>
+    String(card?._id || card?.applicationId || card?.id || "");
+
+  const isCardSelected = (card) =>
+    selectedRows.includes(getCardKey(card));
+
   // totalPages is now managed via state from backend response
   const startIndex = (currentPage - 1) * itemsPerPage;
 
+  const searchedData = useMemo(() => {
+    const term = String(search || "").trim().toLowerCase();
+    if (!term) return processedData;
+
+    const normalize = (v) => (v == null ? "" : String(v)).toLowerCase();
+
+    return (processedData || []).filter((row, idx) => {
+      const srNo = startIndex + idx + 1;
+      const membersCount = row.totalMembers ?? ((row.members?.length || 0) + 1);
+      const amountPaid = Number(row.payment?.totalPaid || 0);
+      const createdAtRaw = getCardCreatedAt(row);
+      const createdAtFormatted = formatCardCreatedAt(createdAtRaw);
+      const createdByLabel = resolveCreatedByLabel(row);
+      const createdById = resolveCreatedById(row?.createdBy);
+
+      const haystack = [
+        srNo,
+        row.id,
+        row.applicationId,
+        row.cardNo,
+        row._id,
+        row.applicant,
+        row.phone,
+        row.pincode,
+        membersCount,
+        amountPaid,
+        `₹${amountPaid}`,
+        createdAtRaw,
+        createdAtFormatted,
+        createdByLabel,
+        createdById,
+      ]
+        .map(normalize)
+        .join(" |");
+
+      return haystack.includes(term);
+    });
+  }, [processedData, search, startIndex, createdByMap]);
+
   // If the data is already paginated by the server, we don't slice.
   // We only slice if the server returned more items than the limit (fallback).
-  const paginatedData = processedData;
+  const paginatedData = searchedData;
 
   // renderPaginationButtons removed as it's now handled by the Pagination component.
 
@@ -452,29 +496,30 @@ const HealthCard = () => {
 
   const handleSelectAll = (e) => {
     if (e.target.checked) {
-      const newSelectedRows = paginatedData.map(
-        (_, index) => startIndex + index,
-      );
-      setSelectedRows(newSelectedRows);
+      setSelectedRows(paginatedData.map((row) => getCardKey(row)).filter(Boolean));
     } else {
       setSelectedRows([]);
     }
   };
 
+  const selectedRowsOnCurrentPage = useMemo(
+    () => paginatedData.filter((card) => isCardSelected(card)),
+    [paginatedData, selectedRows],
+  );
+
   const handleExport = () => {
-    if (selectedRows.length === 0) {
+    if (selectedRowsOnCurrentPage.length === 0) {
       toastWarn("Please select at least one item to export.");
       return;
     }
-    const rows = selectedRows.map((index) => processedData[index]);
-    exportAyushCardApplicationsToExcel(rows);
+    exportAyushCardApplicationsToExcel(selectedRowsOnCurrentPage);
   };
 
-  const handleSelectRow = (globalIndex) => {
+  const handleSelectRow = (card) => {
+    const key = getCardKey(card);
+    if (!key) return;
     setSelectedRows((prev) =>
-      prev.includes(globalIndex)
-        ? prev.filter((i) => i !== globalIndex)
-        : [...prev, globalIndex],
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
     );
   };
 
@@ -613,7 +658,7 @@ const HealthCard = () => {
                       onChange={handleSelectAll}
                       checked={
                         paginatedData.length > 0 &&
-                        selectedRows.length === paginatedData.length
+                        paginatedData.every((row) => isCardSelected(row))
                       }
                       className="w-4 h-4 rounded border-[#D1D5DB] border text-[#22333B] focus:ring-[#111827]"
                     />
@@ -678,8 +723,8 @@ const HealthCard = () => {
                       <td className="py-3 px-4 text-center">
                         <input
                           type="checkbox"
-                          checked={selectedRows.includes(globalIndex)}
-                          onChange={() => handleSelectRow(globalIndex)}
+                          checked={isCardSelected(row)}
+                          onChange={() => handleSelectRow(row)}
                           className="w-4 h-4 rounded border-[#D1D5DB] text-[#22333B] focus:ring-[#111827]"
                         />
                       </td>
