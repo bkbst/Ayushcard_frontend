@@ -253,6 +253,18 @@ export default function ThermalReceipt() {
               6- फोन नंबर: 8303902030
             </p>
           </div>
+
+          {/* Signature box (last) */}
+          <div className="flex justify-center pt-2 pb-1">
+            <div
+              className="w-full border border-black rounded-md h-10 flex items-center justify-center"
+              style={{ minHeight: 34 }}
+            >
+              <span className="text-[9px] font-semibold text-gray-400">
+                Signature
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     );
