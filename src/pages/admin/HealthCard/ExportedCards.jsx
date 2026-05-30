@@ -212,7 +212,6 @@ export default function ExportedCards() {
         page: currentPage,
         limit: itemsPerPage,
       };
-      if (search) params.search = search;
       if (createdAt) params.createdAt = createdAt;
       params.sort = "-createdAt";
       const res = await apiService.getPrintedCards(params);
@@ -251,7 +250,45 @@ export default function ExportedCards() {
     }
   };
 
-  const processedData = useMemo(() => healthCards, [healthCards]);
+  const processedData = useMemo(() => {
+    const term = String(search || "").trim().toLowerCase();
+    if (!term) return healthCards;
+
+    const start = (currentPage - 1) * itemsPerPage;
+
+    const normalize = (v) => (v == null ? "" : String(v)).toLowerCase();
+
+    return (healthCards || []).filter((row, idx) => {
+      const srNo = start + idx + 1;
+      const membersCount = row.totalMembers ?? ((row.members?.length || 0) + 1);
+      const amountPaid = Number(row.payment?.totalPaid || 0);
+      const createdAtRaw = getCardCreatedAt(row);
+      const createdAtFormatted = formatCardCreatedAt(createdAtRaw);
+      const createdByLabel = resolveCreatedByLabel(row);
+      const createdById = resolveCreatedById(row?.createdBy);
+
+      const haystack = [
+        srNo,
+        row.id,
+        row.applicationId,
+        row.cardNo,
+        row._id,
+        row.applicant,
+        row.phone,
+        membersCount,
+        amountPaid,
+        `₹${amountPaid}`,
+        createdAtRaw,
+        createdAtFormatted,
+        createdByLabel,
+        createdById,
+      ]
+        .map(normalize)
+        .join(" |");
+
+      return haystack.includes(term);
+    });
+  }, [healthCards, search, currentPage, itemsPerPage, createdByMap]);
 
   // totalPages is now managed via state from backend response
   const startIndex = (currentPage - 1) * itemsPerPage;
