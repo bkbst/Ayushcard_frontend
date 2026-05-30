@@ -69,12 +69,119 @@ export function useAyushCardApplicationForm({
   );
   /** Server `data` from last successful card create — drives receipt / print */
   const [submissionReceipt, setSubmissionReceipt] = useState(null);
+  /** Creator (employee/user) details for `submissionReceipt.createdBy` */
+  const [createdByEmployee, setCreatedByEmployee] = useState(null);
+  const [createdByEmployeeLoading, setCreatedByEmployeeLoading] = useState(false);
   const { toastWarn, toastError, toastSuccess } = useToast();
   const { todayCampId, todayCampName } = useAttendance();
   const [submitting, setSubmitting] = useState(false);
   const [registrationCheckInProgress, setRegistrationCheckInProgress] =
     useState(false);
   const submissionCompletedRef = useRef(false);
+
+  const ensureReceiptHasCreatedBy = async (created) => {
+    if (!created || typeof created !== "object") return created;
+    if (created.createdBy) return created;
+
+    const id = created._id || created.id;
+    if (!id) return created;
+
+    try {
+      const res = await apiService.getHealthCardById(String(id));
+      const envelope = res?.data && typeof res.data === "object" ? res.data : res;
+      const record =
+        envelope?.data && typeof envelope.data === "object" ? envelope.data : envelope;
+      if (record && (record.applicationId || record._id || record.contact)) {
+        return { ...created, ...record };
+      }
+      return created;
+    } catch {
+      return created;
+    }
+  };
+
+  useEffect(() => {
+    const raw = submissionReceipt?.createdBy;
+    if (!raw) {
+      setCreatedByEmployee(null);
+      setCreatedByEmployeeLoading(false);
+      return;
+    }
+
+    const extractEmployeeFromResponse = (res) => {
+      if (!res || typeof res !== "object") return null;
+      const candidate =
+        res?.data?.user ||
+        res?.user ||
+        res?.data?.data?.user ||
+        res?.data?.user ||
+        res?.data?.data ||
+        res?.data ||
+        res;
+
+      if (
+        candidate &&
+        typeof candidate === "object" &&
+        !Array.isArray(candidate) &&
+        candidate.user &&
+        (candidate.user._id || candidate.user.employeeId || candidate.user.name)
+      ) {
+        return candidate.user;
+      }
+
+      if (
+        candidate &&
+        typeof candidate === "object" &&
+        !Array.isArray(candidate) &&
+        (candidate._id || candidate.employeeId || candidate.name || candidate.email || candidate.contact)
+      ) {
+        return candidate;
+      }
+
+      return null;
+    };
+
+    // If backend already populates createdBy with user fields, use it.
+    if (
+      typeof raw === "object" &&
+      raw != null &&
+      (raw.name || raw.employeeId || raw.email || raw.contact)
+    ) {
+      setCreatedByEmployee(raw);
+      setCreatedByEmployeeLoading(false);
+      return;
+    }
+
+    const createdById =
+      typeof raw === "string" ? raw : raw?._id || raw?.id || raw?.userId;
+    if (!createdById) {
+      setCreatedByEmployee(null);
+      setCreatedByEmployeeLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setCreatedByEmployeeLoading(true);
+    apiService
+      .getEmployeeById(String(createdById))
+      .then((res) => {
+        if (cancelled) return;
+        const user = extractEmployeeFromResponse(res);
+        setCreatedByEmployee(user || null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCreatedByEmployee(null);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setCreatedByEmployeeLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [submissionReceipt?.createdBy]);
   // Step 1 State
   const [docFront, setDocFront] = useState(null);
   /** 2nd identity document (separate supporting doc, no OCR) */
@@ -2086,7 +2193,7 @@ export function useAyushCardApplicationForm({
       const apiRes = await apiService.submitCardApplication(payload);
       const created = extractCreatedCardRecord(apiRes);
       submissionCompletedRef.current = true;
-      setSubmissionReceipt(created);
+      setSubmissionReceipt(await ensureReceiptHasCreatedBy(created));
       if (created?.applicationId) {
         setApplicationId(String(created.applicationId));
       }
@@ -2267,7 +2374,7 @@ export function useAyushCardApplicationForm({
       }
       const created = extractCreatedCardRecord(apiRes);
       submissionCompletedRef.current = true;
-      setSubmissionReceipt(created);
+      setSubmissionReceipt(await ensureReceiptHasCreatedBy(created));
       if (created?.applicationId) {
         setApplicationId(String(created.applicationId));
       }
@@ -2673,6 +2780,7 @@ export function useAyushCardApplicationForm({
   return {
     variant, isOpen, onClose, skipPayment, staffPaymentFlow, onStaffSubmit, onBack,
     currentStep, setCurrentStep, applicationId, setApplicationId, submissionReceipt, setSubmissionReceipt,
+    createdByEmployee, createdByEmployeeLoading,
     toastWarn, toastError, toastSuccess, todayCampId, todayCampName, submitting, setSubmitting,
     docFront, setDocFront, docBack, setDocBack, docAadhaarBack, setDocAadhaarBack,
     ocrFileInputRef, aadhaarBackOcrInputRef, docBackInputRef, docBackCameraInputRef,

@@ -14,6 +14,8 @@ export default function ThermalReceipt() {
   const {
     hasPrintableReceipt,
     submissionReceipt,
+    createdByEmployee,
+    createdByEmployeeLoading,
     applicationId,
     familyHead,
     members,
@@ -45,6 +47,24 @@ export default function ThermalReceipt() {
       Array.isArray(rec?.members) && rec.members.length > 0
         ? rec.members
         : members;
+
+    const createdById = (() => {
+      const raw = rec?.createdBy;
+      if (!raw) return "";
+      if (typeof raw === "string") return raw;
+      return raw?._id || raw?.id || raw?.userId || "";
+    })();
+    const createdByName =
+      createdByEmployee?.name ||
+      [createdByEmployee?.firstName, createdByEmployee?.middleName, createdByEmployee?.lastName]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+    const createdByEmpId = createdByEmployee?.employeeId || createdByEmployee?.id;
+    const createdByLabel =
+      createdByEmployeeLoading
+        ? "Loading…"
+        : createdByName || createdByEmpId || (createdById ? createdById : "—");
     const rawDateStr = rec?.applicationDate != null ? String(rec.applicationDate).trim() : "";
     // Prefer full ISO timestamps (createdAt / updatedAt) from the API — they carry the real time.
     // applicationDate is often a date-only string ("YYYY-MM-DD") sent back from the server,
@@ -119,6 +139,13 @@ export default function ThermalReceipt() {
                 <span className="text-right break-words">{todayCampName}</span>
               </div>
             )}
+
+            {rec?.createdBy ? (
+              <div className="flex justify-between gap-1 border-t border-dotted border-gray-300 pt-0.5 mt-0.5">
+                <span className="font-bold shrink-0">Created By</span>
+                <span className="text-right break-all">{createdByLabel}</span>
+              </div>
+            ) : null}
           </div>
 
           <div className="text-[8px] mb-2 border-b border-dashed border-gray-400 pb-2">

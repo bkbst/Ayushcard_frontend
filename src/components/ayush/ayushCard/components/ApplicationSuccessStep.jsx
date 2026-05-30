@@ -8,8 +8,20 @@ export default function ApplicationSuccessStep() {
   const {
     skipPayment, staffPaymentFlow, submissionReceipt, estimatedFee, applicationId,
     txnId, staffPaymentMode, familyHead, totalMembersCount, hasPrintableReceipt,
+    createdByEmployee, createdByEmployeeLoading,
     handleRawBtPrint, resetForm, variant, onBack, onClose,
   } = form;
+
+  const createdByName =
+    createdByEmployee?.name ||
+    [createdByEmployee?.firstName, createdByEmployee?.middleName, createdByEmployee?.lastName]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+  const createdByEmpId = createdByEmployee?.employeeId || createdByEmployee?.id;
+  const createdByLabel = createdByEmployeeLoading
+    ? "Loading…"
+    : createdByName || createdByEmpId || (submissionReceipt?.createdBy ? String(submissionReceipt.createdBy?._id || submissionReceipt.createdBy?.id || submissionReceipt.createdBy) : "—");
 
   return (
             <div className="flex-1 min-h-0 overflow-y-auto px-8 py-8 animate-in zoom-in-95 duration-500 bg-[#F9FAFB] custom-scrollbar">
@@ -150,6 +162,15 @@ export default function ApplicationSuccessStep() {
                               : totalMembersCount}
                         </span>
                       </div>
+
+                      {submissionReceipt?.createdBy ? (
+                        <div className="flex justify-between items-start gap-3 text-sm">
+                          <span className="text-gray-500 shrink-0">Created By</span>
+                          <span className="font-semibold text-[#222222] text-right break-all">
+                            {createdByLabel}
+                          </span>
+                        </div>
+                      ) : null}
                     </div>
 
                     <div className="pt-4 mt-4 border-t border-dashed border-gray-200">

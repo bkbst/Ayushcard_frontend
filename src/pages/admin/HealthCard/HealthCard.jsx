@@ -164,9 +164,66 @@ const HealthCard = () => {
 
   const [createdAt, setCreatedAt] = useState("");
 
+  const [createdByMap, setCreatedByMap] = useState(() => ({}));
+
+  const extractEmployeeFromResponse = (res) => {
+    if (!res || typeof res !== "object") return null;
+    const candidate =
+      res?.data?.user ||
+      res?.user ||
+      res?.data?.data?.user ||
+      res?.data?.user ||
+      res?.data?.data ||
+      res?.data ||
+      res;
+
+    if (
+      candidate &&
+      typeof candidate === "object" &&
+      !Array.isArray(candidate) &&
+      candidate.user &&
+      (candidate.user._id || candidate.user.employeeId || candidate.user.name)
+    ) {
+      return candidate.user;
+    }
+
+    if (
+      candidate &&
+      typeof candidate === "object" &&
+      !Array.isArray(candidate) &&
+      (candidate._id || candidate.employeeId || candidate.name || candidate.email || candidate.contact)
+    ) {
+      return candidate;
+    }
+
+    return null;
+  };
+
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+
+  const resolveCreatedById = (raw) => {
+    if (!raw) return "";
+    if (typeof raw === "string") return raw;
+    return raw?._id || raw?.id || raw?.userId || "";
+  };
+
+  const resolveCreatedByLabel = (card) => {
+    const raw = card?.createdBy;
+    if (!raw) return "—";
+    if (typeof raw === "object" && raw != null) {
+      const name =
+        raw.name ||
+        [raw.firstName, raw.middleName, raw.lastName]
+          .filter(Boolean)
+          .join(" ")
+          .trim();
+      return name || raw.employeeId || raw.email || raw.contact || raw._id || "—";
+    }
+    const id = resolveCreatedById(raw);
+    return createdByMap[id] || id || "—";
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -180,6 +237,55 @@ const HealthCard = () => {
   useEffect(() => {
     fetchCards();
   }, [currentPage, itemsPerPage, search, activeFilter, createdAt, location.key]);
+
+  useEffect(() => {
+    const ids = Array.from(
+      new Set(
+        (healthCards || [])
+          .map((c) => resolveCreatedById(c?.createdBy))
+          .filter(Boolean),
+      ),
+    );
+
+    const missing = ids.filter((id) => !createdByMap[id]);
+    if (missing.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const results = await Promise.all(
+          missing.map(async (id) => {
+            try {
+              const res = await apiService.getEmployeeById(String(id));
+              const user = extractEmployeeFromResponse(res);
+              const name =
+                user?.name ||
+                [user?.firstName, user?.middleName, user?.lastName]
+                  .filter(Boolean)
+                  .join(" ")
+                  .trim();
+              const label = name || user?.employeeId || user?.email || user?.contact || String(id);
+              return [id, label];
+            } catch {
+              return [id, String(id)];
+            }
+          }),
+        );
+        if (cancelled) return;
+        setCreatedByMap((prev) => {
+          const next = { ...prev };
+          for (const [id, label] of results) next[id] = label;
+          return next;
+        });
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [healthCards, createdByMap]);
 
   const fetchCards = async () => {
     try {
@@ -498,7 +604,7 @@ const HealthCard = () => {
           </div>
         ) : paginatedData.length > 0 ? (
           <div className="overflow-y-auto overflow-x-auto flex-1">
-            <table className="min-w-[1120px] w-full text-left border-collapse relative">
+            <table className="min-w-[1300px] w-full text-left border-collapse relative">
               <thead className="sticky top-0 z-10 bg-[#FFFFFF]">
                 <tr>
                   <th className="py-3 px-4 w-12 text-center">
@@ -547,6 +653,9 @@ const HealthCard = () => {
                     "left",
                     "w-[190px]",
                   )}
+                  <th className="py-3 px-4 text-sm font-semibold text-[#22333B] w-[190px] whitespace-nowrap">
+                    Created By
+                  </th>
                   {renderSortableHeader(
                     "Status",
                     "status",
@@ -609,6 +718,14 @@ const HealthCard = () => {
                         }
                       >
                         {formatCardCreatedAt(getCardCreatedAt(row))}
+                      </td>
+                      <td
+                        className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap"
+                        title={row?.createdBy ? String(resolveCreatedById(row.createdBy) || "") : undefined}
+                      >
+                        <div className="max-w-[180px] truncate">
+                          {resolveCreatedByLabel(row)}
+                        </div>
                       </td>
                       <td className="py-3 px-4 whitespace-nowrap">
                         <StatusBadge
