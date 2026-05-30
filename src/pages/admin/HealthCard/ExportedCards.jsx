@@ -77,6 +77,63 @@ export default function ExportedCards() {
 
   const [createdAt, setCreatedAt] = useState("");
 
+  const [createdByMap, setCreatedByMap] = useState(() => ({}));
+
+  const extractEmployeeFromResponse = (res) => {
+    if (!res || typeof res !== "object") return null;
+    const candidate =
+      res?.data?.user ||
+      res?.user ||
+      res?.data?.data?.user ||
+      res?.data?.user ||
+      res?.data?.data ||
+      res?.data ||
+      res;
+
+    if (
+      candidate &&
+      typeof candidate === "object" &&
+      !Array.isArray(candidate) &&
+      candidate.user &&
+      (candidate.user._id || candidate.user.employeeId || candidate.user.name)
+    ) {
+      return candidate.user;
+    }
+
+    if (
+      candidate &&
+      typeof candidate === "object" &&
+      !Array.isArray(candidate) &&
+      (candidate._id || candidate.employeeId || candidate.name || candidate.email || candidate.contact)
+    ) {
+      return candidate;
+    }
+
+    return null;
+  };
+
+  const resolveCreatedById = (raw) => {
+    if (!raw) return "";
+    if (typeof raw === "string") return raw;
+    return raw?._id || raw?.id || raw?.userId || "";
+  };
+
+  const resolveCreatedByLabel = (card) => {
+    const raw = card?.createdBy;
+    if (!raw) return "—";
+    if (typeof raw === "object" && raw != null) {
+      const name =
+        raw.name ||
+        [raw.firstName, raw.middleName, raw.lastName]
+          .filter(Boolean)
+          .join(" ")
+          .trim();
+      return name || raw.employeeId || raw.email || raw.contact || raw._id || "—";
+    }
+    const id = resolveCreatedById(raw);
+    return createdByMap[id] || id || "—";
+  };
+
   const [itemsPerPage, setItemsPerPage] = useState(25);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -93,6 +150,56 @@ export default function ExportedCards() {
   useEffect(() => {
     fetchCards();
   }, [currentPage, itemsPerPage, search, createdAt, location.key]);
+
+  useEffect(() => {
+    const ids = Array.from(
+      new Set(
+        (healthCards || [])
+          .map((c) => resolveCreatedById(c?.createdBy))
+          .filter(Boolean),
+      ),
+    );
+
+    const missing = ids.filter((id) => !createdByMap[id]);
+    if (missing.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const results = await Promise.all(
+          missing.map(async (id) => {
+            try {
+              const res = await apiService.getEmployeeById(String(id));
+              const user = extractEmployeeFromResponse(res);
+              const name =
+                user?.name ||
+                [user?.firstName, user?.middleName, user?.lastName]
+                  .filter(Boolean)
+                  .join(" ")
+                  .trim();
+              const label =
+                name || user?.employeeId || user?.email || user?.contact || String(id);
+              return [id, label];
+            } catch {
+              return [id, String(id)];
+            }
+          }),
+        );
+        if (cancelled) return;
+        setCreatedByMap((prev) => {
+          const next = { ...prev };
+          for (const [id, label] of results) next[id] = label;
+          return next;
+        });
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [healthCards, createdByMap]);
 
   useEffect(() => {
     setSelectedRows([]);
@@ -275,6 +382,9 @@ export default function ExportedCards() {
                   <th className="py-3 px-4 text-sm font-semibold text-[#22333B] min-w-[170px]">
                     Created At
                   </th>
+                  <th className="py-3 px-4 text-sm font-semibold text-[#22333B] min-w-[170px]">
+                    Created By
+                  </th>
                   <th className="py-3 px-4 text-sm font-semibold text-[#22333B]">
                     Status
                   </th>
@@ -326,6 +436,18 @@ export default function ExportedCards() {
                         }
                       >
                         {formatCardCreatedAt(getCardCreatedAt(row))}
+                      </td>
+                      <td
+                        className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap"
+                        title={
+                          row?.createdBy
+                            ? String(resolveCreatedById(row.createdBy) || "")
+                            : undefined
+                        }
+                      >
+                        <div className="max-w-[180px] truncate">
+                          {resolveCreatedByLabel(row)}
+                        </div>
                       </td>
                       <td className="py-3 px-4 whitespace-nowrap">
                         <StatusBadge status={row.status} />
