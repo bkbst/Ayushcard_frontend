@@ -123,6 +123,10 @@ export function parseHealthCardsResponse(res) {
 
 export function normalizeHealthCard(card) {
   const totalCount = Number(card.totalMembers ?? card.totalMember) || 0;
+  const location =
+    card?.ngoLocation ||
+    card?.location ||
+    "";
 
   return {
     ...card,
@@ -131,7 +135,9 @@ export function normalizeHealthCard(card) {
       [card.firstName, card.middleName, card.lastName].filter(Boolean).join(" ") ||
       "",
     phone: card.contact || "",
+    address: card.address || "",
     pincode: card.pincode || "",
+    location,
     totalMembers: totalCount,
     members: Array.isArray(card.members)
       ? card.members

@@ -291,6 +291,8 @@ export default function VerifiedCards() {
         row._id,
         row.applicant,
         row.phone,
+        row.pincode,
+        row.address,
         membersCount,
         amountPaid,
         `₹${amountPaid}`,
@@ -401,7 +403,7 @@ export default function VerifiedCards() {
           </div>
         ) : paginatedData.length > 0 ? (
           <div className="overflow-y-auto overflow-x-auto flex-1">
-            <table className="w-full min-w-[980px] text-left border-collapse relative">
+            <table className="w-full min-w-[1260px] text-left border-collapse relative">
               <thead className="sticky top-0 z-10 bg-[#FFFFFF]">
                 <tr>
                   <th className="py-3 px-4 w-12 text-center">
@@ -432,6 +434,12 @@ export default function VerifiedCards() {
                   </th>
                   <th className="py-3 px-4 text-sm font-semibold text-[#22333B] text-right hidden lg:table-cell">
                     Amount
+                  </th>
+                  <th className="py-3 px-4 text-sm font-semibold text-[#22333B] hidden xl:table-cell">
+                    Pincode
+                  </th>
+                  <th className="py-3 px-4 text-sm font-semibold text-[#22333B] hidden xl:table-cell min-w-[200px]">
+                    Address
                   </th>
                   <th className="py-3 px-4 text-sm font-semibold text-[#22333B] hidden xl:table-cell min-w-[170px]">
                     Created At
@@ -480,6 +488,14 @@ export default function VerifiedCards() {
                       </td>
                       <td className="py-3 px-4 text-sm font-normal text-[#22333B] text-right whitespace-nowrap hidden lg:table-cell">
                         ₹{Number(row.payment?.totalPaid || 0).toFixed(2)}
+                      </td>
+                      <td className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap hidden xl:table-cell">
+                        {row.pincode || "—"}
+                      </td>
+                      <td className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap hidden xl:table-cell">
+                        <div className="max-w-[220px] truncate" title={row.address || undefined}>
+                          {row.address || "—"}
+                        </div>
                       </td>
                       <td
                         className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap hidden xl:table-cell"

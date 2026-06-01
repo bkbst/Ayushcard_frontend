@@ -21,9 +21,9 @@ const StatusBadge = ({ status }) => {
 
   switch (status) {
     case "Exported":
-      bg = "bg-[#76DB1E33]";
-      dot = "bg-[#76DB1E]";
-      text = "text-[#76DB1E]"; // Use a similar green for Exported for now
+      bg = "bg-[#F0F7FF]";
+      dot = "bg-[#2563EB]";
+      text = "text-[#2563EB]";
       break;
   }
 
@@ -275,6 +275,8 @@ export default function ExportedCards() {
         row._id,
         row.applicant,
         row.phone,
+        row.pincode,
+        row.address,
         membersCount,
         amountPaid,
         `₹${amountPaid}`,
@@ -416,6 +418,12 @@ export default function ExportedCards() {
                   <th className="py-3 px-4 text-sm font-semibold text-[#22333B] text-right">
                     Amount
                   </th>
+                  <th className="py-3 px-4 text-sm font-semibold text-[#22333B]">
+                    Pincode
+                  </th>
+                  <th className="py-3 px-4 text-sm font-semibold text-[#22333B] min-w-[200px]">
+                    Address
+                  </th>
                   <th className="py-3 px-4 text-sm font-semibold text-[#22333B] min-w-[170px]">
                     Created At
                   </th>
@@ -463,6 +471,14 @@ export default function ExportedCards() {
                       </td>
                       <td className="py-3 px-4 text-sm font-normal text-[#22333B] text-right whitespace-nowrap">
                         ₹{Number(row.payment?.totalPaid || 0).toFixed(2)}
+                      </td>
+                      <td className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap">
+                        {row.pincode || "—"}
+                      </td>
+                      <td className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap">
+                        <div className="max-w-[220px] truncate" title={row.address || undefined}>
+                          {row.address || "—"}
+                        </div>
                       </td>
                       <td
                         className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap"

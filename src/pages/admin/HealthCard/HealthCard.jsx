@@ -33,18 +33,22 @@ const StatusBadge = ({ status, onStatusChange, isLoading }) => {
   switch (status) {
     case "Not verified":
     case "pending":
-      bg = "bg-[#FFA10033]";
-      dot = "bg-[#FFA100]";
-      text = "text-[#FFA100]";
+      bg = "bg-[#FF383C33]";
+      dot = "bg-[#FF383C]";
+      text = "text-[#FF383C]";
       break;
     case "Verified":
     case "approved":
     case "active":
-    case "Exported":
-    case "exported":
       bg = "bg-[#76DB1E33]";
       dot = "bg-[#76DB1E]";
       text = "text-[#76DB1E]";
+      break;
+    case "Exported":
+    case "exported":
+      bg = "bg-[#F0F7FF]";
+      dot = "bg-[#2563EB]";
+      text = "text-[#2563EB]";
       break;
     case "Expired":
     case "expired":
@@ -61,16 +65,25 @@ const StatusBadge = ({ status, onStatusChange, isLoading }) => {
   }
 
   if (onStatusChange) {
+    const normalizedValue = (() => {
+      const s = String(status || "").trim().toLowerCase();
+      if (s === "verified") return "approved";
+      if (s === "not verified") return "pending";
+      if (s === "exported") return "exported";
+      return s;
+    })();
+
     return (
       <div className="relative inline-flex items-center">
         <select
-          value={status.toLowerCase() === "verified" ? "approved" : status.toLowerCase() === "not verified" ? "pending" : status.toLowerCase()}
+          value={normalizedValue}
           onChange={(e) => onStatusChange(e.target.value)}
           disabled={isLoading}
           className={`appearance-none cursor-pointer pl-6 pr-8 py-1 rounded-full text-xs font-normal border-none focus:outline-none focus:ring-0 ${bg} ${text} ${isLoading ? 'opacity-50' : ''}`}
         >
           <option value="pending">Pending</option>
           <option value="approved">Approved</option>
+          <option value="exported">Exported</option>
           <option value="rejected">Rejected</option>
           <option value="expired">Expired</option>
         </select>
@@ -471,6 +484,7 @@ const HealthCard = () => {
         row.applicant,
         row.phone,
         row.pincode,
+        row.address,
         membersCount,
         amountPaid,
         `₹${amountPaid}`,
@@ -486,7 +500,6 @@ const HealthCard = () => {
     });
   }, [processedData, search, startIndex, createdByMap]);
 
-  // If the data is already paginated by the server, we don't slice.
   // We only slice if the server returned more items than the limit (fallback).
   const paginatedData = searchedData;
 
@@ -649,7 +662,7 @@ const HealthCard = () => {
           </div>
         ) : paginatedData.length > 0 ? (
           <div className="overflow-y-auto overflow-x-auto flex-1">
-            <table className="min-w-[1300px] w-full text-left border-collapse relative">
+            <table className="min-w-[1450px] w-full text-left border-collapse relative">
               <thead className="sticky top-0 z-10 bg-[#FFFFFF]">
                 <tr>
                   <th className="py-3 px-4 w-12 text-center">
@@ -691,6 +704,12 @@ const HealthCard = () => {
                     "pincode",
                     "left",
                     "w-[120px]",
+                  )}
+                  {renderSortableHeader(
+                    "Address",
+                    "address",
+                    "left",
+                    "min-w-[200px]",
                   )}
                   {renderSortableHeader(
                     "Created At",
@@ -753,6 +772,11 @@ const HealthCard = () => {
                       </td>
                       <td className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap">
                         {row.pincode || "—"}
+                      </td>
+                      <td className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap">
+                        <div className="max-w-[220px] truncate" title={row.address || undefined}>
+                          {row.address || "—"}
+                        </div>
                       </td>
                       <td
                         className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap"
