@@ -50,6 +50,7 @@ import HealthCardDetails from "./pages/admin/HealthCard/HealthCardDetails";
 import CreateHealthCard from "./pages/admin/HealthCard/CreateHealthCard";
 import AdminVerifiedCards from "./pages/admin/HealthCard/VerifiedCards";
 import AdminExportedCards from "./pages/admin/HealthCard/ExportedCards";
+import AyushVitran from "./pages/admin/HealthCard/AyushVitran";
 import Partners from "./pages/admin/Partners/Partners";
 import PartnerDetails from "./pages/admin/Partners/PartnerDetails";
 import CreatePartner from "./pages/admin/Partners/CreatePartner";
@@ -190,6 +191,7 @@ function App() {
                 element={<AdminExportedCards />}
               />
               <Route path="health-card/create" element={<CreateHealthCard />} />
+              <Route path="health-card/vitran" element={<AyushVitran />} />
               <Route path="health-card/:id" element={<HealthCardDetails />} />
               <Route path="partners" element={<Partners />} />
               <Route path="partners/create" element={<CreatePartner />} />
@@ -226,6 +228,7 @@ function App() {
                 path="health-card/:id"
                 element={<EmployeeHealthCardDetails />}
               />
+              <Route path="health-card/vitran" element={<AyushVitran />} />
               <Route path="partners" element={<EmployeePartners />} />
               <Route path="partners/create" element={<EmployeeCreatePartner />} />
               <Route path="partners/:id" element={<EmployeePartnerDetails />} />
