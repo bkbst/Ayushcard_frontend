@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { 
-  Search, 
-  Printer, 
-  User, 
-  FileText, 
-  X, 
+import {
+  Search,
+  Printer,
+  User,
+  FileText,
+  X,
   Calendar,
   RefreshCw
 } from "lucide-react";
@@ -24,7 +24,7 @@ const getFormattedCurrentDate = () => {
 // ─── DETERMINISTIC SETTLEMENT CALCULATOR ENGINE ─────────────────────────────
 const calculateSettlement = (totalCards) => {
   const count = Number(totalCards) || 0;
-  
+
   // Offline cards are ~90%, Online cards are ~10%
   const offlineCount = Math.max(0, Math.round(count * 0.9));
   const onlineCount = Math.max(0, count - offlineCount);
@@ -55,11 +55,11 @@ const calculateSettlement = (totalCards) => {
 
   // Penalty count: around 5% of offline cards, penalty fee of Rs 25 each
   const penaltyCount = Math.max(0, Math.round(offlineCount * 0.05));
-  const penaltyAmount = penaltyCount * 25; 
+  const penaltyAmount = penaltyCount * 25;
 
   // Online Penalty count
-  const onPenaltyCount = Math.max(0, Math.round(onlineCount * 0.28)); 
-  const onPenaltyAmount = onPenaltyCount * 50; 
+  const onPenaltyCount = Math.max(0, Math.round(onlineCount * 0.28));
+  const onPenaltyAmount = onPenaltyCount * 50;
 
   const offlineTotalWithPenalty = offlineBaseTotal + penaltyAmount;
   const onlineTotalWithPenalty = onlineBaseTotal + onPenaltyAmount;
@@ -77,7 +77,7 @@ const calculateSettlement = (totalCards) => {
     amt240,
     amt280,
     offlineBaseTotal,
-    
+
     onlineCount,
     on160,
     on200,
@@ -105,11 +105,11 @@ const SettlementSlipPreview = ({ employee, date }) => {
   const calc = useMemo(() => calculateSettlement(employee.totalCards), [employee.totalCards]);
 
   return (
-    <div 
+    <div
       className="bg-white text-black p-6 border border-gray-300 rounded-sm shadow-md mx-auto font-mono"
-      style={{ 
-        width: "80mm", 
-        maxWidth: "100%", 
+      style={{
+        width: "80mm",
+        maxWidth: "100%",
         minHeight: "170mm",
         boxSizing: "border-box",
         fontSize: "11px",
@@ -121,7 +121,7 @@ const SettlementSlipPreview = ({ employee, date }) => {
         <div className="w-20 h-20 rounded-full border border-black flex items-center justify-center p-2 mb-2 bg-white">
           <img src="/logo.svg" alt="BKBS Logo" className="h-12 w-auto object-contain" />
         </div>
-        
+
         {/* 2. Title: Settlement */}
         <h2 className="text-base font-extrabold tracking-widest uppercase text-center font-sans mt-1">
           Settlement
@@ -145,7 +145,7 @@ const SettlementSlipPreview = ({ employee, date }) => {
       <div className="space-y-1 font-bold mb-4">
         <div>Date :- <span className="font-mono font-medium">{date}</span></div>
         <div>Camp Area :- <span className="font-sans font-medium">{employee.location || "Mangla Vihar"}</span></div>
-        <div>Ayoush Mitra Name :- <span className="font-sans font-medium">{employee.name}</span></div>
+        <div>Ayush Mitra Name :- <span className="font-sans font-medium">{employee.name}</span></div>
         <div>Ayoush Mitra ID No :- <span className="font-mono font-medium">{employee.id}</span></div>
         <div>Camp Area :- <span className="font-sans font-medium">{employee.location || "Mangla Vihar"}</span></div>
         <div className="flex justify-between">
@@ -229,14 +229,14 @@ const SettlementSlipPreview = ({ employee, date }) => {
 // ─── MAIN MODULE COMPONENT ──────────────────────────────────────────────────
 const AyushVitran = () => {
   const { toastSuccess, toastError } = useToast();
-  
+
   // Auth state contexts
   const [userRole, setUserRole] = useState("Admin");
   const [currentUser, setCurrentUser] = useState({ name: "Officer", email: "officer@bkbs.org", id: "EMP-1000" });
 
   // Settlement Slips Modal Trigger states
   const [selectedEmployee, setSelectedEmployee] = useState(null);
-  
+
   // Roster Directory Tables state
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -346,7 +346,7 @@ const AyushVitran = () => {
     if (!employee) return;
     const calc = calculateSettlement(employee.totalCards);
     const dateStr = getFormattedCurrentDate();
-    
+
     // Resolve absolute logo URL
     const logoUrl = `${window.location.origin}/logo.svg`;
 
@@ -557,7 +557,7 @@ const AyushVitran = () => {
                 <span>${employee.location || "Mangla Vihar"}</span>
               </div>
               <div class="metadata-row">
-                <span>Ayoush Mitra Name :-</span>
+                <span>Ayush Mitra Name :-</span>
                 <span>${employee.name}</span>
               </div>
               <div class="metadata-row">
@@ -658,7 +658,7 @@ const AyushVitran = () => {
   // Handle Search Local Processed Directory
   const filteredEmployees = useMemo(() => {
     return employees.filter((emp) => {
-      const matchQuery = 
+      const matchQuery =
         emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         emp.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
         emp.email.toLowerCase().includes(searchQuery.toLowerCase());
@@ -674,7 +674,7 @@ const AyushVitran = () => {
         name: currentUser.name,
         email: currentUser.email,
         location: currentUser.location || "Mangla Vihar",
-        totalCards: 67, 
+        totalCards: 67,
         pincode: "208015",
       };
     }
@@ -683,22 +683,22 @@ const AyushVitran = () => {
 
   return (
     <div className="flex flex-col h-[calc(100vh-170px)] print:h-auto print:bg-white" style={{ fontFamily: "Inter, sans-serif" }}>
-      
+
       {/* ── HEADER TITLE BLOCK ────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-5 shrink-0 gap-4 sm:gap-0 no-print">
         <div>
           <h2 className="text-xl sm:text-2xl font-black text-[#22333B] tracking-tight">Ayush Vitran Section</h2>
           <p className="text-xs text-gray-500 mt-1">
-            {userRole === "Employee" 
+            {userRole === "Employee"
               ? "Reconcile, audit, and print your operations settlement slip"
               : "Reconcile card generation statistics and print Mitra settlement slips"
             }
           </p>
         </div>
-        
+
         {/* Quick Refresh Icon */}
         {userRole !== "Employee" && (
-          <button 
+          <button
             onClick={fetchEmployeesList}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFCFB] border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 hover:text-gray-800 transition-colors shadow-sm"
           >
@@ -723,7 +723,7 @@ const AyushVitran = () => {
               />
               <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
             </div>
-            
+
             <div className="text-xs text-gray-500 bg-white border border-gray-200 px-3 py-1.5 rounded-lg font-semibold shadow-sm flex items-center gap-1.5">
               <Calendar size={13} className="text-[#F68E5F]" />
               Period: {getFormattedCurrentDate()}
@@ -744,7 +744,7 @@ const AyushVitran = () => {
                     <tr className="text-gray-700 text-xs font-bold uppercase">
                       <th className="py-3 px-5 text-center w-16">Sr.No</th>
                       <th className="py-3 px-4">Employee ID</th>
-                      <th className="py-3 px-4">Ayoush Mitra Name</th>
+                      <th className="py-3 px-4">Ayush Mitra Name</th>
                       <th className="py-3 px-4">Email</th>
                       <th className="py-3 px-4 text-center">Settlement Date</th>
                       <th className="py-3 px-4 text-center">Total Cards</th>
@@ -794,7 +794,7 @@ const AyushVitran = () => {
               </div>
             )}
           </div>
-          
+
           <div className="mt-4 shrink-0 no-print">
             <Pagination
               currentPage={currentPage}
@@ -862,9 +862,9 @@ const AyushVitran = () => {
 
             {/* Scrollable ticket container mockup */}
             <div className="flex-1 overflow-y-auto bg-gray-100/50 p-6 flex items-start justify-center custom-scrollbar">
-              <SettlementSlipPreview 
-                employee={selectedEmployee} 
-                date={getFormattedCurrentDate()} 
+              <SettlementSlipPreview
+                employee={selectedEmployee}
+                date={getFormattedCurrentDate()}
               />
             </div>
 
