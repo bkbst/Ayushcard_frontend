@@ -22,17 +22,17 @@ const SettlementSlipPreview = ({ employee, date }) => {
         <div>Date :- <span className="font-mono font-medium">{date}</span></div>
         <div>Camp Area :- <span className="font-sans font-medium">{employee.location || "Mangla Vihar"}</span></div>
         <div>Ayush Mitra Name :- <span className="font-sans font-medium">{employee.name}</span></div>
-        <div>Ayoush Mitra ID No :- <span className="font-mono font-medium">{employee.id}</span></div>
+        <div>Ayush Mitra ID No :- <span className="font-mono font-medium">{employee.id}</span></div>
         <div className="flex justify-between">
           <span>District :- <span className="font-sans font-medium">Kanpur Nagar</span></span>
           <span>Pin Code :- <span className="font-mono font-medium">{employee.pincode || "208015"}</span></span>
         </div>
         <div className="border-t border-dashed border-black pt-1 mt-1">
-          Total Apply Ayoush Card - <span className="font-mono font-black text-sm">{employee.totalCards}</span>
+          Total Apply Ayush Card - <span className="font-mono font-black text-sm">{employee.totalCards}</span>
         </div>
       </div>
       <div className="text-center my-3 bg-gray-50 py-0.5 border border-dashed border-black">
-        <span className="text-xs font-extrabold tracking-wide uppercase font-sans">Apply Ayoush Card</span>
+        <span className="text-xs font-extrabold tracking-wide uppercase font-sans">Apply Ayush Card</span>
       </div>
       <table className="w-full text-left border-collapse text-[10px] font-bold mb-4">
         <thead>

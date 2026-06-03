@@ -67,8 +67,8 @@ const PenaltyReceiptPreview = ({ card, receiptRecord }) => {
 
       {/* Ayush Mitra */}
       <div className="space-y-1 font-bold text-[10.5px] mb-4 border-t border-dashed border-black pt-2">
-        <div><span className="font-black">Ayoush Mitra Name :-</span> {card?.employeeName || "—"}</div>
-        <div><span className="font-black">Ayoush Mitra ID No :-</span> {card?.employeeId || "—"}</div>
+        <div><span className="font-black">Ayush Mitra Name :-</span> {card?.employeeName || "—"}</div>
+        <div><span className="font-black">Ayush Mitra ID No :-</span> {card?.employeeId || "—"}</div>
       </div>
 
       {/* Signature */}

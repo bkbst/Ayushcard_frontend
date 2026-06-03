@@ -124,7 +124,7 @@ const AyushVitran = () => {
       try {
         const u = JSON.parse(userRaw);
         setCurrentUser({ name: u.name || "Employee", email: u.email || "N/A", id: u.employeeId || u._id || "EMP-1000", location: u.location || "Mangla Vihar" });
-      } catch {}
+      } catch { }
     }
     setUserRole(localStorage.getItem("userRole") || "Admin");
   }, []);
@@ -143,7 +143,7 @@ const AyushVitran = () => {
   const saveDupReceipt = useCallback((record) => {
     setDupReceipts(prev => {
       const updated = [record, ...prev];
-      try { localStorage.setItem("ayush_dup_receipts", JSON.stringify(updated)); } catch {}
+      try { localStorage.setItem("ayush_dup_receipts", JSON.stringify(updated)); } catch { }
       return updated;
     });
   }, []);
@@ -171,7 +171,7 @@ const AyushVitran = () => {
       if (!list.length && rawData?.data && Array.isArray(rawData.data)) list = rawData.data;
       if (!list.length && rawData?.users && Array.isArray(rawData.users)) list = rawData.users;
       if (!list.length && rawData?.employees && Array.isArray(rawData.employees)) list = rawData.employees;
-      
+
       // 2. Fetch employee performance for actual card counts
       let performanceMap = {};
       try {
@@ -203,9 +203,9 @@ const AyushVitran = () => {
           const userName = u.name ? u.name.toString().toLowerCase() : "";
 
           // Fetch correct count from API mapping or fallback
-          const totalCards = performanceMap[rawId] 
-            || performanceMap[empId] 
-            || performanceMap[userName] 
+          const totalCards = performanceMap[rawId]
+            || performanceMap[empId]
+            || performanceMap[userName]
             || Number(u.totalCards || u.cardsCount || u.cardsIssued || 0);
 
           return {
@@ -289,12 +289,12 @@ const AyushVitran = () => {
     <div class="metadata-row"><span>Date :-</span><span>${dateStr}</span></div>
     <div class="metadata-row"><span>Camp Area :-</span><span>${employee.location || "Mangla Vihar"}</span></div>
     <div class="metadata-row"><span>Ayush Mitra Name :-</span><span>${employee.name}</span></div>
-    <div class="metadata-row"><span>Ayoush Mitra ID No :-</span><span>${employee.id}</span></div>
+    <div class="metadata-row"><span>Ayush Mitra ID No :-</span><span>${employee.id}</span></div>
     <div class="metadata-double"><span>District :- Kanpur Nagar</span><span>Pin Code :- ${employee.pincode || "208015"}</span></div>
     <div class="dashed-divider" style="margin-top:6px"></div>
-    <div style="margin-top:5px">Total Apply Ayoush Card - ${employee.totalCards}</div>
+    <div style="margin-top:5px">Total Apply Ayush Card - ${employee.totalCards}</div>
   </div>
-  <div class="dashed-border-top-bottom uppercase">Apply Ayoush Card</div>
+  <div class="dashed-border-top-bottom uppercase">Apply Ayush Card</div>
   <div class="table-heading"><span>Card Detail - Amount</span><span>Online - Amount</span></div>
   <div class="table-row"><span>160 x ${calc.off160} = ${Number(calc.amt160).toFixed(2)}</span><span>${calc.on160} = ${Number(calc.onAmt160).toFixed(0)}</span></div>
   <div class="table-row"><span>200 x ${calc.off200} = ${Number(calc.amt200).toFixed(2)}</span><span>${calc.on200} = ${Number(calc.onAmt200).toFixed(0)}</span></div>
@@ -363,9 +363,9 @@ const AyushVitran = () => {
     <div class="metadata-row"><span>Mitra ID No :-</span><span>${employee.id}</span></div>
     <div class="metadata-double"><span>District :- Kanpur</span><span>Pin Code :- ${employee.pincode || "208015"}</span></div>
     <div class="dashed-divider" style="margin-top:4px"></div>
-    <div style="margin-top:3px">Total Apply Ayoush Card - ${employee.totalCards}</div>
+    <div style="margin-top:3px">Total Apply Ayush Card - ${employee.totalCards}</div>
   </div>
-  <div class="dashed-border-top-bottom uppercase">Apply Ayoush Card</div>
+  <div class="dashed-border-top-bottom uppercase">Apply Ayush Card</div>
   <div class="table-heading"><span>Card Detail - Amount</span><span>Online - Amount</span></div>
   <div class="table-row"><span>160 x ${calc.off160} = ${Number(calc.amt160).toFixed(0)}</span><span>${calc.on160} = ${Number(calc.onAmt160).toFixed(0)}</span></div>
   <div class="table-row"><span>200 x ${calc.off200} = ${Number(calc.amt200).toFixed(0)}</span><span>${calc.on200} = ${Number(calc.onAmt200).toFixed(0)}</span></div>
@@ -432,7 +432,7 @@ const AyushVitran = () => {
         c.mobile.includes(q) ||
         c.employeeName.toLowerCase().includes(q) ||
         c.receiptNo.toLowerCase().includes(q);
-      const matchEmp = !cardFilterEmployee || 
+      const matchEmp = !cardFilterEmployee ||
         String(c.employeeId).toLowerCase() === String(cardFilterEmployee).toLowerCase();
       return matchSearch && matchEmp;
     });
@@ -644,46 +644,46 @@ const AyushVitran = () => {
                 <p className="text-sm font-semibold">Loading exported cards...</p>
               </div>
             ) : (
-            <div className="overflow-y-auto overflow-x-auto flex-1">
-              <table className="w-full text-left border-collapse min-w-[700px]">
-                <thead className="sticky top-0 z-10 bg-white border-b border-gray-100 shadow-sm">
-                  <tr className="text-gray-500 text-[11px] font-bold uppercase tracking-wide">
-                    <th className="py-3 px-4">#</th>
-                    <th className="py-3 px-4">Card ID</th>
-                    <th className="py-3 px-4">Client Name</th>
-                    <th className="py-3 px-4">Mobile</th>
-                    <th className="py-3 px-4">Ayush Mitra</th>
-                    <th className="py-3 px-4 text-center">Amount</th>
-                    <th className="py-3 px-4 text-center">Export Date</th>
-                    <th className="py-3 px-4 text-center">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredCards.map((card, i) => (
-                    <tr key={card.id || i} className="border-b border-[#F3F4F6] hover:bg-[#F9FAFB] transition-colors">
-                      <td className="py-3 px-4 text-sm font-normal text-[#22333B]">{i + 1}</td>
-                      <td className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap">{card.id}</td>
-                      <td className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap">{card.clientName}</td>
-                      <td className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap">{card.mobile}</td>
-                      <td className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap">{card.employeeName || "—"}</td>
-                      <td className="py-3 px-4 text-sm font-normal text-[#22333B] text-right whitespace-nowrap">₹{Number(card.amount || 0).toFixed(2)}</td>
-                      <td className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap">{card.exportDate}</td>
-                      <td className="py-3 px-4">
-                        <button
-                          onClick={() => setSelectedCardForDup(card)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-amber-50 text-amber-600 border border-amber-100 hover:bg-amber-500 hover:text-white transition-all shadow-sm"
-                        >
-                          <Copy size={11} /> Duplicate
-                        </button>
-                      </td>
+              <div className="overflow-y-auto overflow-x-auto flex-1">
+                <table className="w-full text-left border-collapse min-w-[700px]">
+                  <thead className="sticky top-0 z-10 bg-white border-b border-gray-100 shadow-sm">
+                    <tr className="text-gray-500 text-[11px] font-bold uppercase tracking-wide">
+                      <th className="py-3 px-4">#</th>
+                      <th className="py-3 px-4">Card ID</th>
+                      <th className="py-3 px-4">Client Name</th>
+                      <th className="py-3 px-4">Mobile</th>
+                      <th className="py-3 px-4">Ayush Mitra</th>
+                      <th className="py-3 px-4 text-center">Amount</th>
+                      <th className="py-3 px-4 text-center">Export Date</th>
+                      <th className="py-3 px-4 text-center">Action</th>
                     </tr>
-                  ))}
-                  {filteredCards.length === 0 && !exportedLoading && (
-                    <tr><td colSpan={8} className="py-16 text-center text-gray-400 text-sm font-medium">No exported cards found. Cards appear here once they are printed/exported.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {filteredCards.map((card, i) => (
+                      <tr key={card.id || i} className="border-b border-[#F3F4F6] hover:bg-[#F9FAFB] transition-colors">
+                        <td className="py-3 px-4 text-sm font-normal text-[#22333B]">{i + 1}</td>
+                        <td className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap">{card.id}</td>
+                        <td className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap">{card.clientName}</td>
+                        <td className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap">{card.mobile}</td>
+                        <td className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap">{card.employeeName || "—"}</td>
+                        <td className="py-3 px-4 text-sm font-normal text-[#22333B] text-right whitespace-nowrap">₹{Number(card.amount || 0).toFixed(2)}</td>
+                        <td className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap">{card.exportDate}</td>
+                        <td className="py-3 px-4">
+                          <button
+                            onClick={() => setSelectedCardForDup(card)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-amber-50 text-amber-600 border border-amber-100 hover:bg-amber-500 hover:text-white transition-all shadow-sm"
+                          >
+                            <Copy size={11} /> Duplicate
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {filteredCards.length === 0 && !exportedLoading && (
+                      <tr><td colSpan={8} className="py-16 text-center text-gray-400 text-sm font-medium">No exported cards found. Cards appear here once they are printed/exported.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
 
