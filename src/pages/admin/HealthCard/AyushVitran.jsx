@@ -12,818 +12,19 @@ import { LOGO_BASE64 } from "../../../utils/logoBase64";
 import {
   normalizeHealthCard,
   parseHealthCardsResponse,
-  formatCardCreatedAt,
-  getCardCreatedAt,
 } from "../../../utils/healthCardUtils";
 
-// ─── HELPERS ─────────────────────────────────────────────────────────────────
-const getFormattedCurrentDate = () => {
-  const d = new Date();
-  const day = String(d.getDate()).padStart(2, "0");
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const year = d.getFullYear();
-  return `${day}-${month}-${year}`;
-};
-
-const getDateTime = () => {
-  const d = new Date();
-  return d.toLocaleString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
-};
-
-const generateDupReceiptNo = () => {
-  const d = new Date();
-  const datePart = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-  const rand = String(Math.floor(Math.random() * 9000) + 1000);
-  return `DUP-${datePart}-${rand}`;
-};
-
-const PENALTY_AMOUNT = 50;
-
-// ─── SETTLEMENT CALCULATION ENGINE ───────────────────────────────────────────
-const calculateSettlement = (totalCards) => {
-  const count = Number(totalCards) || 0;
-  const offlineCount = Math.max(0, Math.round(count * 0.9));
-  const onlineCount = Math.max(0, count - offlineCount);
-  const off160 = Math.max(0, Math.round(offlineCount * 0.4));
-  const off200 = Math.max(0, Math.round(offlineCount * 0.35));
-  const off240 = Math.max(0, Math.round(offlineCount * 0.15));
-  const off280 = Math.max(0, offlineCount - (off160 + off200 + off240));
-  const amt160 = off160 * 160; const amt200 = off200 * 200;
-  const amt240 = off240 * 240; const amt280 = off280 * 280;
-  const offlineBaseTotal = amt160 + amt200 + amt240 + amt280;
-  const on160 = Math.max(0, Math.round(onlineCount * 0.4));
-  const on200 = Math.max(0, Math.round(onlineCount * 0.3));
-  const on240 = Math.max(0, Math.round(onlineCount * 0.3));
-  const on280 = Math.max(0, onlineCount - (on160 + on200 + on240));
-  const onAmt160 = on160 * 160; const onAmt200 = on200 * 200;
-  const onAmt240 = on240 * 240; const onAmt280 = on280 * 280;
-  const onlineBaseTotal = onAmt160 + onAmt200 + onAmt240 + onAmt280;
-  const penaltyCount = Math.max(0, Math.round(offlineCount * 0.05));
-  const penaltyAmount = penaltyCount * 25;
-  const onPenaltyCount = Math.max(0, Math.round(onlineCount * 0.28));
-  const onPenaltyAmount = onPenaltyCount * 50;
-  const offlineTotalWithPenalty = offlineBaseTotal + penaltyAmount;
-  const onlineTotalWithPenalty = onlineBaseTotal + onPenaltyAmount;
-  const grandTotal = offlineBaseTotal + onlineBaseTotal + penaltyAmount + onPenaltyAmount;
-  return {
-    offlineCount, off160, off200, off240, off280, amt160, amt200, amt240, amt280, offlineBaseTotal,
-    onlineCount, on160, on200, on240, on280, onAmt160, onAmt200, onAmt240, onAmt280, onlineBaseTotal,
-    penaltyCount, penaltyAmount, onPenaltyCount, onPenaltyAmount,
-    offlineTotalWithPenalty, onlineTotalWithPenalty, grandTotal
-  };
-};
-
-// ─── HELPER: map a normalized health card to the shape used by the duplicate receipt flow ─
-const toDupCardShape = (card, createdByMap = {}) => {
-  const empRaw = card.createdBy;
-  const empId = typeof empRaw === "object" ? (empRaw?._id || empRaw?.employeeId || "") : (empRaw || "");
-  const empName = typeof empRaw === "object"
-    ? (empRaw?.name || [empRaw?.firstName, empRaw?.lastName].filter(Boolean).join(" ") || empRaw?.email || empRaw?.employeeId || "")
-    : (createdByMap[empRaw] || empRaw || "");
-
-  return {
-    id: card.id || card.applicationId || card._id || "",
-    clientName: card.applicant || "",
-    mobile: card.phone || "",
-    mukhiyaName: card.applicant || "",
-    area: card.location || card.ngoLocation || "Mangla Vihar",
-    district: "Kanpur Nagar",
-    pincode: card.pincode || "208015",
-    totalMember: card.totalMembers || 1,
-    amount: Number(card.payment?.totalPaid || 0),
-    cardType: (card.totalMembers || 1) > 1 ? "Family" : "Individual",
-    exportDate: formatCardCreatedAt(getCardCreatedAt(card)),
-    employeeId: empId,
-    employeeName: empName,
-    receiptNo: card.applicationId || card.id || card._id || "",
-    address: card.address || "",
-    _rawCard: card,
-  };
-};
-
-// ─── SETTLEMENT SLIP PREVIEW (for employee tab) ───────────────────────────────
-const SettlementSlipPreview = ({ employee, date }) => {
-  const calc = useMemo(() => calculateSettlement(employee.totalCards), [employee.totalCards]);
-  return (
-    <div className="bg-white text-black p-6 border border-gray-300 rounded-sm shadow-md mx-auto font-mono"
-      style={{ width: "80mm", maxWidth: "100%", minHeight: "170mm", boxSizing: "border-box", fontSize: "11px", lineHeight: "1.4" }}>
-      <div className="flex flex-col items-center mb-4">
-        <div className="w-20 h-20 rounded-full border border-black flex items-center justify-center p-2 mb-2 bg-white">
-          <img src={LOGO_BASE64} alt="BKBS Logo" className="h-12 w-auto object-contain" />
-        </div>
-        <h2 className="text-base font-extrabold tracking-widest uppercase text-center font-sans mt-1">Settlement</h2>
-      </div>
-      <div className="text-center font-sans mb-4 border-b border-dashed border-black pb-2">
-        <h3 className="text-xs font-black uppercase leading-tight">Baijnaath Kesar Bai Sewa Trust</h3>
-        <p className="text-[10px] font-bold mt-0.5">1-A Mangla Vihar New PAC Line</p>
-        <p className="text-[10px] font-bold">Kanpur Nagar – 208015</p>
-      </div>
-      <div className="space-y-1 font-bold mb-4">
-        <div>Date :- <span className="font-mono font-medium">{date}</span></div>
-        <div>Camp Area :- <span className="font-sans font-medium">{employee.location || "Mangla Vihar"}</span></div>
-        <div>Ayush Mitra Name :- <span className="font-sans font-medium">{employee.name}</span></div>
-        <div>Ayoush Mitra ID No :- <span className="font-mono font-medium">{employee.id}</span></div>
-        <div className="flex justify-between">
-          <span>District :- <span className="font-sans font-medium">Kanpur Nagar</span></span>
-          <span>Pin Code :- <span className="font-mono font-medium">{employee.pincode || "208015"}</span></span>
-        </div>
-        <div className="border-t border-dashed border-black pt-1 mt-1">
-          Total Apply Ayoush Card - <span className="font-mono font-black text-sm">{employee.totalCards}</span>
-        </div>
-      </div>
-      <div className="text-center my-3 bg-gray-50 py-0.5 border border-dashed border-black">
-        <span className="text-xs font-extrabold tracking-wide uppercase font-sans">Apply Ayoush Card</span>
-      </div>
-      <table className="w-full text-left border-collapse text-[10px] font-bold mb-4">
-        <thead>
-          <tr className="border-b border-black font-sans uppercase">
-            <th className="py-1">Card Detail - Amount</th>
-            <th className="py-1 text-right">Online - Amount</th>
-          </tr>
-        </thead>
-        <tbody className="font-mono">
-          <tr className="border-b border-dashed border-gray-100"><td className="py-1.5">160 x {calc.off160} = {Number(calc.amt160).toFixed(2)}</td><td className="py-1.5 text-right">{calc.on160} = {Number(calc.onAmt160).toFixed(0)}</td></tr>
-          <tr className="border-b border-dashed border-gray-100"><td className="py-1.5">200 x {calc.off200} = {Number(calc.amt200).toFixed(2)}</td><td className="py-1.5 text-right">{calc.on200} = {Number(calc.onAmt200).toFixed(0)}</td></tr>
-          <tr className="border-b border-dashed border-gray-100"><td className="py-1.5">240 x {calc.off240} = {Number(calc.amt240).toFixed(2)}</td><td className="py-1.5 text-right">{calc.on240} = {Number(calc.onAmt240).toFixed(0)}</td></tr>
-          <tr className="border-b border-dashed border-gray-100"><td className="py-1.5">280 x {calc.off280} = {Number(calc.amt280).toFixed(2)}</td><td className="py-1.5 text-right">{calc.on280} = {Number(calc.onAmt280).toFixed(0)}</td></tr>
-          <tr className="border-b border-dashed border-gray-100"><td className="py-1.5">Penelty x {calc.penaltyCount} = {Number(calc.penaltyAmount).toFixed(2)}</td><td className="py-1.5 text-right">{calc.onPenaltyCount} = {Number(calc.onPenaltyAmount).toFixed(0)}</td></tr>
-          <tr className="border-t border-black font-extrabold text-[10.5px]">
-            <td className="py-2">Total = {calc.offlineCount} = {Number(calc.offlineTotalWithPenalty).toFixed(2)}</td>
-            <td className="py-2 text-right">{calc.onlineCount} = {Number(calc.onlineTotalWithPenalty).toFixed(2)}</td>
-          </tr>
-        </tbody>
-      </table>
-      <div className="bg-gray-50 border border-black p-2 text-center rounded-sm font-sans mb-6">
-        <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Calculated Revenue Equation</div>
-        <div className="text-[10.5px] font-black mt-0.5 leading-tight">
-          Grand Total = {calc.offlineBaseTotal} + {calc.onlineTotalWithPenalty} + {calc.penaltyAmount} = <span className="text-[#F68E5F] font-mono font-black text-sm">₹{calc.grandTotal}</span>
-        </div>
-      </div>
-      <div className="space-y-4 font-bold my-4 border-t border-dashed border-black pt-3">
-        <div>Cash Receiver Name : __________________</div>
-        <div>Cash Receiver ID No :- __________________</div>
-      </div>
-      <div className="mt-8 mb-2">
-        <div className="border border-black rounded-sm h-14 w-full flex items-center justify-center bg-gray-50/20">
-          <span className="font-sans text-gray-400 font-bold text-xs uppercase tracking-widest">Signature</span>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ─── PENALTY RECEIPT PREVIEW (reference design) ───────────────────────────────
-const PenaltyReceiptPreview = ({ card, receiptRecord }) => {
-  const date = receiptRecord?.issuedAt || getFormattedCurrentDate();
-  return (
-    <div className="bg-white text-black border border-gray-400 mx-auto font-sans"
-      style={{ width: "80mm", maxWidth: "100%", boxSizing: "border-box", fontSize: "11px", lineHeight: "1.5", padding: "16px 14px" }}>
-      {/* Logo */}
-      <div className="flex flex-col items-center mb-3">
-        <div className="w-16 h-16 rounded-full border-2 border-black flex items-center justify-center p-1.5 mb-2 bg-white">
-          <img src={LOGO_BASE64} alt="BKBS Logo" className="h-10 w-auto object-contain" />
-        </div>
-        <h2 className="text-sm font-extrabold underline text-center" style={{ fontFamily: "serif" }}>
-          Penelty Recept
-        </h2>
-      </div>
-
-      {/* Trust Header */}
-      <div className="text-center mb-4 border-b border-black pb-3">
-        <div className="font-black text-sm leading-tight" style={{ fontFamily: "serif" }}>Baijnaath Kesar Bai Sewa Trust</div>
-        <div className="text-[10px] font-bold mt-0.5">1-A Mangla Vihar New PAC Line</div>
-        <div className="text-[10px] font-bold">Kanpur Nagar – 208015</div>
-      </div>
-
-      {/* Card Details */}
-      <div className="space-y-1.5 font-bold text-[10.5px] mb-3">
-        <div><span className="font-black">Date :-</span> {date}</div>
-        <div><span className="font-black">Card ID No :-</span> {card?.id || card?.receiptNo || "—"}</div>
-        <div><span className="font-black">Camp Area :-</span> {card?.area || "Mangla Vihar"}</div>
-        <div><span className="font-black">Mukhiya Name :-</span> {card?.mukhiyaName || card?.clientName || "—"}</div>
-        <div><span className="font-black">Full Address :-</span> {card?.address || "—"}</div>
-        <div className="flex justify-between">
-          <span><span className="font-black">District :-</span> {card?.district || "Kanpur Nagar"}</span>
-        </div>
-        <div className="flex justify-between">
-          <span><span className="font-black">Pin Code :-</span> {card?.pincode || "208015"}</span>
-          <span><span className="font-black">Total Member :-</span> {card?.totalMember || "1"}</span>
-        </div>
-      </div>
-
-      {/* Penalty Box */}
-      <div className="text-center font-black text-[11px] my-3 border-t border-b border-black py-2">
-        Penelty Amount :- Rs. {PENALTY_AMOUNT}.00
-      </div>
-
-      {/* Payment Method if present */}
-      {receiptRecord && (
-        <div className="text-[10px] font-bold border border-dashed border-gray-400 p-1.5 mb-3 rounded-sm">
-          <div>Receipt No :- {receiptRecord.receiptNo}</div>
-          <div>Payment Method :- {receiptRecord.paymentMethod === "online" ? "Online (UPI/Net Banking)" : "Offline (Cash)"}</div>
-          {receiptRecord.paymentRef && <div>Ref :- {receiptRecord.paymentRef}</div>}
-          <div>Status :- {receiptRecord.paymentStatus === "paid" ? "✓ Paid" : "⏳ Pending"}</div>
-        </div>
-      )}
-
-      {/* Hindi important info */}
-      <div className="mb-3">
-        <div className="text-center font-black text-[10.5px] mb-1.5 underline">महत्वपूर्ण जानकारी</div>
-        <div className="text-[9.5px] leading-relaxed space-y-2" style={{ fontFamily: "sans-serif" }}>
-          <p>कार्ड का उपयोग करने से पूर्व, कृपया कार्ड के साथ दिए किए गए लेटर को ध्यानपूर्वक अवश्य पढ़ें।</p>
-          <p>किसी भी प्रकार की समस्या या सहायता हेतु, कृपया कार्ड के साथ दिए गए हेल्पलाइन नंबर 8303902030 पर संपर्क करें।</p>
-          <p>आपके द्वारा जमा की गई राशि का उपयोग जरूरतमंद लोगों की सहायता एवं सामाजिक कल्याण के कार्यों में लगाया जाता है।</p>
-        </div>
-      </div>
-
-      {/* Ayush Mitra */}
-      <div className="space-y-1 font-bold text-[10.5px] mb-4 border-t border-dashed border-black pt-2">
-        <div><span className="font-black">Ayoush Mitra Name :-</span> {card?.employeeName || "—"}</div>
-        <div><span className="font-black">Ayoush Mitra ID No :-</span> {card?.employeeId || "—"}</div>
-      </div>
-
-      {/* Signature */}
-      <div className="mt-6">
-        <div className="border border-black h-14 w-full flex items-center justify-center rounded-sm bg-gray-50">
-          <span className="text-gray-300 font-bold text-xs uppercase tracking-widest">Signature</span>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ─── STAT TILE ────────────────────────────────────────────────────────────────
-const StatTile = ({ icon: Icon, label, value, color, bg }) => (
-  <div className={`rounded-xl border ${bg} p-4 flex items-center gap-3 shadow-sm flex-1 shrink-0 min-w-[170px] sm:min-w-0`}>
-    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${color}`}>
-      <Icon size={18} />
-    </div>
-    <div>
-      <p className="text-xs text-gray-500 font-semibold">{label}</p>
-      <p className="text-xl font-black text-[#22333B]">{value}</p>
-    </div>
-  </div>
-);
-
-// ─── DUPLICATE RECEIPT MODAL ──────────────────────────────────────────────────
-const DuplicateReceiptModal = ({ card, onClose, onIssued }) => {
-  const { toastSuccess, toastError, toastWarn } = useToast();
-  const [step, setStep] = useState(1);
-  const [paymentMethod, setPaymentMethod] = useState("offline");
-  const [paymentRef, setPaymentRef] = useState("");
-  const [paymentStatus, setPaymentStatus] = useState("paid");
-  const [generatedRecord, setGeneratedRecord] = useState(null);
-  const [isPrinted, setIsPrinted] = useState(false);
-
-  const handleGenerate = () => {
-    if (paymentMethod === "online" && !paymentRef.trim()) {
-      toastError("Please enter a payment reference for online payment.");
-      return;
-    }
-    const record = {
-      receiptNo: generateDupReceiptNo(),
-      cardId: card.id,
-      originalReceiptNo: card.receiptNo,
-      clientName: card.clientName,
-      mobile: card.mobile,
-      employeeId: card.employeeId,
-      employeeName: card.employeeName,
-      penaltyAmount: PENALTY_AMOUNT,
-      paymentMethod,
-      paymentRef: paymentRef.trim(),
-      paymentStatus,
-      issuedAt: getFormattedCurrentDate(),
-      issuedDateTime: getDateTime(),
-      card,
-    };
-    setGeneratedRecord(record);
-    setStep(3);
-    toastSuccess("Duplicate receipt generated!");
-  };
-
-  const handlePrint = () => {
-    if (!generatedRecord) return;
-    const c = generatedRecord.card;
-    const pw = window.open("", "_blank", "width=400,height=820,status=no,toolbar=no,menubar=no");
-    if (!pw) { toastError("Pop-up blocked! Allow pop-ups to print."); return; }
-    pw.document.open();
-    pw.document.write(`
-<!DOCTYPE html><html><head><title>Penalty Receipt - ${generatedRecord.receiptNo}</title>
-<style>
-  @page { margin: 0; }
-  body { font-family: sans-serif; color: black; background: white; padding: 18px 14px; margin: 0; font-size: 11px; line-height: 1.5; }
-  .container { width: 80mm; max-width: 100%; margin: 0 auto; box-sizing: border-box; }
-  .logo-circle { width: 64px; height: 64px; border-radius: 50%; border: 2px solid black; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px auto; background: white; padding: 5px; box-sizing: border-box; }
-  .logo-circle img { height: 42px; width: auto; object-fit: contain; }
-  .title { font-size: 13px; font-weight: 900; text-align: center; text-decoration: underline; font-family: serif; margin-bottom: 10px; }
-  .trust-header { text-align: center; border-bottom: 1px solid black; padding-bottom: 10px; margin-bottom: 12px; }
-  .trust-name { font-size: 12px; font-weight: 900; font-family: serif; }
-  .address-line { font-size: 9.5px; font-weight: bold; margin-top: 2px; }
-  .field-row { display: flex; justify-content: space-between; margin-bottom: 5px; font-weight: bold; font-size: 10.5px; }
-  .field-row span.label { font-weight: 900; }
-  .penalty-box { text-align: center; font-weight: 900; font-size: 11.5px; border-top: 1px solid black; border-bottom: 1px solid black; padding: 7px 0; margin: 10px 0; }
-  .dup-info { font-size: 9.5px; font-weight: bold; border: 1px dashed #888; padding: 5px 6px; border-radius: 3px; margin-bottom: 10px; line-height: 1.6; }
-  .hindi-heading { text-align: center; font-weight: 900; font-size: 10.5px; text-decoration: underline; margin-bottom: 6px; }
-  .hindi-para { font-size: 9.5px; line-height: 1.6; margin-bottom: 6px; }
-  .mitra-section { border-top: 1px dashed black; padding-top: 8px; margin-top: 8px; font-weight: bold; font-size: 10.5px; line-height: 1.8; }
-  .sig-box { border: 1px solid black; height: 52px; display: flex; align-items: center; justify-content: center; margin-top: 24px; border-radius: 2px; }
-  .sig-text { color: #ccc; font-weight: bold; text-transform: uppercase; font-size: 10px; letter-spacing: 2px; }
-</style></head><body>
-<div class="container">
-  <div class="logo-circle"><img src="${LOGO_BASE64}" alt="Logo"/></div>
-  <div class="title">Penelty Recept</div>
-  <div class="trust-header">
-    <div class="trust-name">Baijnaath Kesar Bai Sewa Trust</div>
-    <div class="address-line">1-A Mangla Vihar New PAC Line</div>
-    <div class="address-line">Kanpur Nagar – 208015</div>
-  </div>
-  <div style="margin-bottom:10px; font-size:10.5px;">
-    <div class="field-row"><span><span class="label">Date :-</span> ${generatedRecord.issuedAt}</span></div>
-    <div class="field-row"><span><span class="label">Card ID No :-</span> ${c.id}</span></div>
-    <div class="field-row"><span><span class="label">Camp Area :-</span> ${c.area || "Mangla Vihar"}</span></div>
-    <div class="field-row"><span><span class="label">Mukhiya Name :-</span> ${c.mukhiyaName || c.clientName}</span></div>
-    <div class="field-row"><span><span class="label">Full Address :-</span> ${c.address || "—"}</span></div>
-    <div class="field-row">
-      <span><span class="label">District :-</span> ${c.district || "Kanpur Nagar"}</span>
-    </div>
-    <div class="field-row">
-      <span><span class="label">Pin Code :-</span> ${c.pincode || "208015"}</span>
-      <span><span class="label">Total Member :-</span> ${c.totalMember || 1}</span>
-    </div>
-  </div>
-  <div class="penalty-box">Penelty Amount :- Rs. ${PENALTY_AMOUNT}.00</div>
-  <div class="dup-info">
-    Receipt No :- ${generatedRecord.receiptNo}<br/>
-    Payment Method :- ${generatedRecord.paymentMethod === "online" ? "Online (UPI/Net Banking)" : "Offline (Cash)"}<br/>
-    ${generatedRecord.paymentRef ? `Ref :- ${generatedRecord.paymentRef}<br/>` : ""}
-    Status :- ${generatedRecord.paymentStatus === "paid" ? "✓ Paid" : "⏳ Pending"}
-  </div>
-  <div class="hindi-heading">महत्वपूर्ण जानकारी</div>
-  <p class="hindi-para">कार्ड का उपयोग करने से पूर्व, कृपया कार्ड के साथ दिए किए गए लेटर को ध्यानपूर्वक अवश्य पढ़ें।</p>
-  <p class="hindi-para">किसी भी प्रकार की समस्या या सहायता हेतु, कृपया कार्ड के साथ दिए गए हेल्पलाइन नंबर 8303902030 पर संपर्क करें।</p>
-  <p class="hindi-para">आपके द्वारा जमा की गई राशि का उपयोग जरूरतमंद लोगों की सहायता एवं सामाजिक कल्याण के कार्यों में लगाया जाता है।</p>
-  <div class="mitra-section">
-    <div>Ayoush Mitra Name :- ${c.employeeName || "—"}</div>
-    <div>Ayoush Mitra ID No :- ${c.employeeId || "—"}</div>
-  </div>
-  <div class="sig-box"><span class="sig-text">Signature</span></div>
-</div>
-<script>window.onload=function(){window.focus();window.print();setTimeout(function(){window.close();},500);};</script>
-</body></html>`);
-    pw.document.close();
-    setIsPrinted(true);
-    toastSuccess("Penalty receipt sent to printer!");
-  };
-
-  const handleRawBtPrint = () => {
-    if (!generatedRecord) return;
-    const c = generatedRecord.card;
-    const date = generatedRecord.issuedAt || getFormattedCurrentDate();
-    const htmlContent = `
-<!DOCTYPE html><html><head><meta charset="utf-8">
-<style>
-  body { font-family: sans-serif; color: black; background: white; margin: 0; padding: 0; }
-  .container { width: 58mm; box-sizing: border-box; padding: 2mm; font-size: 8px; line-height: 1.3; }
-  .logo-circle { width: 44px; height: 44px; border-radius: 50%; border: 1.5px solid black; display: flex; align-items: center; justify-content: center; margin: 0 auto 6px auto; background: white; padding: 3px; box-sizing: border-box; }
-  .logo-circle img { height: 30px; width: auto; object-fit: contain; }
-  .title { font-size: 10px; font-weight: 900; text-align: center; text-decoration: underline; font-family: serif; margin-bottom: 6px; text-transform: uppercase; }
-  .trust-header { text-align: center; border-bottom: 1px solid black; padding-bottom: 6px; margin-bottom: 8px; }
-  .trust-name { font-size: 9px; font-weight: 900; font-family: serif; }
-  .address-line { font-size: 7.5px; font-weight: bold; margin-top: 1px; }
-  .field-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-weight: bold; font-size: 8px; }
-  .field-row span.label { font-weight: 900; }
-  .penalty-box { text-align: center; font-weight: 900; font-size: 9px; border-top: 1px solid black; border-bottom: 1px solid black; padding: 5px 0; margin: 8px 0; }
-  .dup-info { font-size: 7.5px; font-weight: bold; border: 1px dashed #888; padding: 4px; border-radius: 2px; margin-bottom: 8px; line-height: 1.4; }
-  .hindi-heading { text-align: center; font-weight: 900; font-size: 8px; text-decoration: underline; margin-bottom: 4px; }
-  .hindi-para { font-size: 7px; line-height: 1.4; margin-bottom: 4px; }
-  .mitra-section { border-top: 1px dashed black; padding-top: 6px; margin-top: 6px; font-weight: bold; font-size: 8px; line-height: 1.5; }
-  .sig-box { border: 1px solid black; height: 36px; display: flex; align-items: center; justify-content: center; margin-top: 18px; border-radius: 2px; }
-  .sig-text { color: #ccc; font-weight: bold; text-transform: uppercase; font-size: 8px; letter-spacing: 1px; }
-</style></head><body>
-<div class="container">
-  <div class="logo-circle"><img src="${LOGO_BASE64}" alt="Logo"/></div>
-  <div class="title">Penalty Receipt</div>
-  <div class="trust-header">
-    <div class="trust-name">Baijnaath Kesar Bai Sewa Trust</div>
-    <div class="address-line">1-A Mangla Vihar New PAC Line</div>
-    <div class="address-line">Kanpur Nagar – 208015</div>
-  </div>
-  <div style="margin-bottom:8px;">
-    <div class="field-row"><span><span class="label">Date :-</span> ${date}</span></div>
-    <div class="field-row"><span><span class="label">Card ID No :-</span> ${c.id}</span></div>
-    <div class="field-row"><span><span class="label">Camp Area :-</span> ${c.area || "Mangla Vihar"}</span></div>
-    <div class="field-row"><span><span class="label">Mukhiya Name :-</span> ${c.mukhiyaName || c.clientName}</span></div>
-    <div class="field-row"><span><span class="label">Full Address :-</span> ${c.address || "—"}</span></div>
-    <div class="field-row"><span><span class="label">District :-</span> ${c.district || "Kanpur Nagar"}</span></div>
-    <div class="field-row">
-      <span><span class="label">Pin Code :-</span> ${c.pincode || "208015"}</span>
-      <span><span class="label">Total Member :-</span> ${c.totalMember || 1}</span>
-    </div>
-  </div>
-  <div class="penalty-box">Penalty Amount :- Rs. ${PENALTY_AMOUNT}.00</div>
-  <div class="dup-info">
-    Receipt No :- ${generatedRecord.receiptNo}<br/>
-    Payment Method :- ${generatedRecord.paymentMethod === "online" ? "Online" : "Offline (Cash)"}<br/>
-    ${generatedRecord.paymentRef ? `Ref :- ${generatedRecord.paymentRef}<br/>` : ""}
-    Status :- Paid
-  </div>
-  <div class="hindi-heading">महत्वपूर्ण जानकारी</div>
-  <p class="hindi-para">कार्ड का उपयोग करने से पूर्व, कृपया कार्ड के साथ दिए किए गए लेटर को ध्यानपूर्वक अवश्य पढ़ें।</p>
-  <p class="hindi-para">किसी भी प्रकार की समस्या या सहायता हेतु, कृपया कार्ड के साथ दिए गए हेल्पलाइन नंबर 8303902030 पर संपर्क करें।</p>
-  <div class="mitra-section">
-    <div>Ayoush Mitra Name :- ${c.employeeName || "—"}</div>
-    <div>Ayoush Mitra ID No :- ${c.employeeId || "—"}</div>
-  </div>
-  <div class="sig-box"><span class="sig-text">Signature</span></div>
-</div>
-</body></html>`;
-
-    const b64 = btoa(unescape(encodeURIComponent(htmlContent)));
-    const playStoreUrl = "https://play.google.com/store/apps/details?id=ru.a402d.rawbtprinter";
-    const rawbtIntent = `intent:#Intent;action=ru.a402d.rawbtprinter.action.PRINT;category=android.intent.category.DEFAULT;type=text/html;S.text=${b64};S.ru.a402d.rawbtprinter.EXTRA_B64=true;S.browser_fallback_url=${encodeURIComponent(playStoreUrl)};end;`;
-
-    const userAgent = navigator.userAgent || "";
-    const isAndroid = /Android/i.test(userAgent);
-    if (!isAndroid) {
-      toastWarn("RawBT printing works on Android phones. Use normal Print on desktop.");
-      return;
-    }
-    window.location.href = rawbtIntent;
-    setIsPrinted(true);
-  };
-
-  const handleSaveAndClose = () => {
-    if (generatedRecord) onIssued(generatedRecord);
-    onClose();
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[95vh]" style={{ fontFamily: "Inter, sans-serif" }}>
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
-          <div>
-            <h3 className="text-sm font-black text-[#22333B]">Issue Duplicate Receipt</h3>
-            <p className="text-xs text-gray-400 mt-0.5">Card: <span className="font-mono font-bold">{card.id}</span> · {card.clientName}</p>
-          </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-700 transition-colors">
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Step Indicator */}
-        <div className="flex items-center px-5 py-3 bg-gray-50 border-b border-gray-100 shrink-0 gap-2">
-          {[1, 2, 3].map((s) => (
-            <React.Fragment key={s}>
-              <div className={`flex items-center gap-1.5 text-xs font-bold transition-colors ${step >= s ? "text-[#F68E5F]" : "text-gray-400"}`}>
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 transition-colors
-                  ${step > s ? "bg-[#F68E5F] border-[#F68E5F] text-white" : step === s ? "border-[#F68E5F] text-[#F68E5F]" : "border-gray-200 text-gray-400"}`}>
-                  {step > s ? <Check size={10} /> : s}
-                </div>
-                {s === 1 ? "Review" : s === 2 ? "Payment" : "Receipt"}
-              </div>
-              {s < 3 && <ChevronRight size={12} className="text-gray-300 shrink-0" />}
-            </React.Fragment>
-          ))}
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-5">
-          {/* Step 1: Card Details */}
-          {step === 1 && (
-            <div className="space-y-4">
-              <div className="bg-orange-50 border border-orange-100 rounded-xl p-4">
-                <p className="text-[10px] font-bold text-orange-500 uppercase tracking-wider mb-2">Original Card Details</p>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-                  {[
-                    ["Card ID", card.id],
-                    ["Receipt No.", card.receiptNo],
-                    ["Client Name", card.clientName],
-                    ["Mobile", card.mobile],
-                    ["Camp Area", card.area],
-                    ["District", card.district],
-                    ["Pin Code", card.pincode],
-                    ["Total Members", card.totalMember],
-                    ["Amount Paid", `₹${card.amount}`],
-                    ["Card Type", card.cardType],
-                    ["Export Date", card.exportDate],
-                  ].map(([label, val]) => (
-                    <div key={label}>
-                      <p className="text-gray-400 font-semibold">{label}</p>
-                      <p className="font-bold text-[#22333B]">{val || "—"}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="bg-gray-50 border border-gray-100 rounded-xl p-4">
-                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">Ayush Mitra (Issuing Employee)</p>
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-orange-100 text-[#F68E5F] flex items-center justify-center font-black text-sm">
-                    {card.employeeName?.charAt(0)}
-                  </div>
-                  <div>
-                    <p className="text-sm font-black text-[#22333B]">{card.employeeName}</p>
-                    <p className="text-xs text-gray-400 font-mono">{card.employeeId}</p>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl p-3">
-                <AlertCircle size={14} className="shrink-0 mt-0.5" />
-                <p>A penalty fee of <strong>₹{PENALTY_AMOUNT}</strong> will be charged for issuing a duplicate receipt. Please confirm with the client before proceeding.</p>
-              </div>
-            </div>
-          )}
-
-          {/* Step 2: Payment */}
-          {step === 2 && (
-            <div className="space-y-4">
-              <div>
-                <p className="text-xs font-bold text-gray-700 mb-2">Penalty Amount</p>
-                <div className="bg-[#22333B] text-white rounded-xl p-4 text-center">
-                  <p className="text-xs font-semibold opacity-70 mb-1">Amount to Collect</p>
-                  <p className="text-3xl font-black">₹{PENALTY_AMOUNT}.00</p>
-                  <p className="text-[10px] opacity-60 mt-1">Duplicate / Reissue Fee</p>
-                </div>
-              </div>
-
-              <div>
-                <p className="text-xs font-bold text-gray-700 mb-2">Payment Method</p>
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { val: "offline", label: "Offline (Cash)", Icon: Banknote },
-                    { val: "online", label: "Online (UPI/Net)", Icon: Wifi },
-                  ].map(({ val, label, Icon: Ic }) => (
-                    <button key={val} onClick={() => setPaymentMethod(val)}
-                      className={`flex items-center gap-2 p-3 rounded-xl border-2 text-sm font-bold transition-all
-                        ${paymentMethod === val ? "border-[#F68E5F] bg-orange-50 text-[#F68E5F]" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}>
-                      <Ic size={16} />
-                      <span>{label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {paymentMethod === "online" && (
-                <div>
-                  <label className="text-xs font-bold text-gray-700 block mb-1.5">Payment Reference / Transaction ID <span className="text-red-500">*</span></label>
-                  <input
-                    type="text"
-                    placeholder="e.g. UPI ref: 123456789"
-                    value={paymentRef}
-                    onChange={e => setPaymentRef(e.target.value)}
-                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#F68E5F]/30 focus:border-[#F68E5F]"
-                  />
-                </div>
-              )}
-
-              <div>
-                <p className="text-xs font-bold text-gray-700 mb-2">Payment Status</p>
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { val: "paid", label: "Paid", Icon: Check, color: "green" },
-                    { val: "pending", label: "Pending", Icon: Clock, color: "amber" },
-                  ].map(({ val, label, Icon: Ic, color }) => (
-                    <button key={val} onClick={() => setPaymentStatus(val)}
-                      className={`flex items-center gap-2 p-3 rounded-xl border-2 text-sm font-bold transition-all
-                        ${paymentStatus === val
-                          ? color === "green" ? "border-green-500 bg-green-50 text-green-600" : "border-amber-400 bg-amber-50 text-amber-600"
-                          : "border-gray-200 text-gray-500 hover:border-gray-300"}`}>
-                      <Ic size={16} />
-                      <span>{label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Step 3: Receipt Preview */}
-          {step === 3 && generatedRecord && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-100 rounded-xl p-3">
-                <Check size={14} className="shrink-0" />
-                <p>Receipt <strong>{generatedRecord.receiptNo}</strong> generated. Print or save below.</p>
-              </div>
-              <div className="bg-gray-50 rounded-xl p-3 flex items-start justify-center overflow-y-auto" style={{ maxHeight: "400px" }}>
-                <PenaltyReceiptPreview card={generatedRecord.card} receiptRecord={generatedRecord} />
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="px-5 py-4 border-t border-gray-100 flex flex-wrap sm:flex-nowrap items-center gap-2.5 shrink-0">
-          {step === 1 && (
-            <>
-              <button onClick={onClose} className="flex-1 py-2 border border-gray-200 rounded-xl text-xs font-bold text-gray-600 bg-white hover:bg-gray-50 transition-colors">Cancel</button>
-              <button onClick={() => setStep(2)} className="flex-1 py-2 bg-[#F68E5F] text-white rounded-xl text-xs font-black hover:bg-[#ff7637] transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap">
-                Proceed to Payment <ChevronRight size={13} />
-              </button>
-            </>
-          )}
-          {step === 2 && (
-            <>
-              <button onClick={() => setStep(1)} className="flex items-center gap-1 py-2 px-3 border border-gray-200 rounded-xl text-xs font-bold text-gray-600 bg-white hover:bg-gray-50 transition-colors whitespace-nowrap">
-                <ChevronLeft size={13} /> Back
-              </button>
-              <button onClick={handleGenerate} className="flex-1 py-2 bg-[#F68E5F] text-white rounded-xl text-xs font-black hover:bg-[#ff7637] transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap">
-                Generate Receipt <ChevronRight size={13} />
-              </button>
-            </>
-          )}
-          {step === 3 && (
-            <div className="flex flex-col sm:flex-row w-full gap-2">
-              <button onClick={handleSaveAndClose} className="w-full sm:w-auto py-2 px-4 border border-gray-200 rounded-xl text-xs font-bold text-gray-600 bg-white hover:bg-gray-50 transition-colors text-center whitespace-nowrap">
-                {isPrinted ? "Close" : "Save & Close"}
-              </button>
-              <div className="flex flex-1 gap-2 w-full">
-                <button onClick={handlePrint} className="flex-1 py-2 bg-[#22333B] text-white rounded-xl text-xs font-black hover:bg-[#1a2830] transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap">
-                  <Printer size={13} /> Print
-                </button>
-                <button onClick={handleRawBtPrint} className="flex-1 py-2 bg-[#F68E5F] text-white rounded-xl text-xs font-black hover:bg-[#ff7637] transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap">
-                  RawBT Print
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ─── VIEW PENALTY RECEIPT MODAL (for history tab) ─────────────────────────────
-const ViewPenaltyModal = ({ record, onClose }) => {
-  const { toastSuccess, toastError, toastWarn } = useToast();
-
-  const handlePrint = () => {
-    const c = record.card;
-    const pw = window.open("", "_blank", "width=400,height=820,status=no,toolbar=no,menubar=no");
-    if (!pw) { toastError("Pop-up blocked!"); return; }
-    pw.document.open();
-    pw.document.write(`
-<!DOCTYPE html><html><head><title>Penalty Receipt - ${record.receiptNo}</title>
-<style>
-  @page { margin: 0; }
-  body { font-family: sans-serif; color: black; background: white; padding: 18px 14px; margin: 0; font-size: 11px; line-height: 1.5; }
-  .container { width: 80mm; max-width: 100%; margin: 0 auto; box-sizing: border-box; }
-  .logo-circle { width: 64px; height: 64px; border-radius: 50%; border: 2px solid black; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px auto; background: white; padding: 5px; box-sizing: border-box; }
-  .logo-circle img { height: 42px; width: auto; object-fit: contain; }
-  .title { font-size: 13px; font-weight: 900; text-align: center; text-decoration: underline; font-family: serif; margin-bottom: 10px; }
-  .trust-header { text-align: center; border-bottom: 1px solid black; padding-bottom: 10px; margin-bottom: 12px; }
-  .trust-name { font-size: 12px; font-weight: 900; font-family: serif; }
-  .address-line { font-size: 9.5px; font-weight: bold; margin-top: 2px; }
-  .field-row { display: flex; justify-content: space-between; margin-bottom: 5px; font-weight: bold; font-size: 10.5px; }
-  .penalty-box { text-align: center; font-weight: 900; font-size: 11.5px; border-top: 1px solid black; border-bottom: 1px solid black; padding: 7px 0; margin: 10px 0; }
-  .dup-info { font-size: 9.5px; font-weight: bold; border: 1px dashed #888; padding: 5px 6px; border-radius: 3px; margin-bottom: 10px; line-height: 1.6; }
-  .hindi-heading { text-align: center; font-weight: 900; font-size: 10.5px; text-decoration: underline; margin-bottom: 6px; }
-  .hindi-para { font-size: 9.5px; line-height: 1.6; margin-bottom: 6px; }
-  .mitra-section { border-top: 1px dashed black; padding-top: 8px; margin-top: 8px; font-weight: bold; font-size: 10.5px; line-height: 1.8; }
-  .sig-box { border: 1px solid black; height: 52px; display: flex; align-items: center; justify-content: center; margin-top: 24px; border-radius: 2px; }
-  .sig-text { color: #ccc; font-weight: bold; text-transform: uppercase; font-size: 10px; letter-spacing: 2px; }
-</style></head><body>
-<div class="container">
-  <div class="logo-circle"><img src="${LOGO_BASE64}" alt="Logo"/></div>
-  <div class="title">Penelty Recept</div>
-  <div class="trust-header">
-    <div class="trust-name">Baijnaath Kesar Bai Sewa Trust</div>
-    <div class="address-line">1-A Mangla Vihar New PAC Line</div>
-    <div class="address-line">Kanpur Nagar – 208015</div>
-  </div>
-  <div style="margin-bottom:10px; font-size:10.5px;">
-    <div class="field-row"><span><b>Date :-</b> ${record.issuedAt}</span></div>
-    <div class="field-row"><span><b>Card ID No :-</b> ${c?.id || "—"}</span></div>
-    <div class="field-row"><span><b>Camp Area :-</b> ${c?.area || "Mangla Vihar"}</span></div>
-    <div class="field-row"><span><b>Mukhiya Name :-</b> ${c?.mukhiyaName || c?.clientName || "—"}</span></div>
-    <div class="field-row"><span><b>Full Address :-</b> ${c?.address || "—"}</span></div>
-    <div class="field-row"><span><b>District :-</b> ${c?.district || "Kanpur Nagar"}</span></div>
-    <div class="field-row"><span><b>Pin Code :-</b> ${c?.pincode || "208015"}</span><span><b>Total Member :-</b> ${c?.totalMember || 1}</span></div>
-  </div>
-  <div class="penalty-box">Penelty Amount :- Rs. ${PENALTY_AMOUNT}.00</div>
-  <div class="dup-info">
-    Receipt No :- ${record.receiptNo}<br/>
-    Payment Method :- ${record.paymentMethod === "online" ? "Online (UPI/Net Banking)" : "Offline (Cash)"}<br/>
-    ${record.paymentRef ? `Ref :- ${record.paymentRef}<br/>` : ""}
-    Status :- ${record.paymentStatus === "paid" ? "✓ Paid" : "⏳ Pending"}
-  </div>
-  <div class="hindi-heading">महत्वपूर्ण जानकारी</div>
-  <p class="hindi-para">कार्ड का उपयोग करने से पूर्व, कृपया कार्ड के साथ दिए किए गए लेटर को ध्यानपूर्वक अवश्य पढ़ें।</p>
-  <p class="hindi-para">किसी भी प्रकार की समस्या या सहायता हेतु, कृपया कार्ड के साथ दिए गए हेल्पलाइन नंबर 8303902030 पर संपर्क करें।</p>
-  <p class="hindi-para">आपके द्वारा जमा की गई राशि का उपयोग जरूरतमंद लोगों की सहायता एवं सामाजिक कल्याण के कार्यों में लगाया जाता है।</p>
-  <div class="mitra-section">
-    <div>Ayoush Mitra Name :- ${c?.employeeName || "—"}</div>
-    <div>Ayoush Mitra ID No :- ${c?.employeeId || "—"}</div>
-  </div>
-  <div class="sig-box"><span class="sig-text">Signature</span></div>
-</div>
-<script>window.onload=function(){window.focus();window.print();setTimeout(function(){window.close();},500);};</script>
-</body></html>`);
-    pw.document.close();
-    toastSuccess("Sent penalty receipt to printer!");
-  };
-
-  const handleRawBtPrint = () => {
-    const c = record.card;
-    const htmlContent = `
-<!DOCTYPE html><html><head><meta charset="utf-8">
-<style>
-  body { font-family: sans-serif; color: black; background: white; margin: 0; padding: 0; }
-  .container { width: 58mm; box-sizing: border-box; padding: 2mm; font-size: 8px; line-height: 1.3; }
-  .logo-circle { width: 44px; height: 44px; border-radius: 50%; border: 1.5px solid black; display: flex; align-items: center; justify-content: center; margin: 0 auto 6px auto; background: white; padding: 3px; box-sizing: border-box; }
-  .logo-circle img { height: 30px; width: auto; object-fit: contain; }
-  .title { font-size: 10px; font-weight: 900; text-align: center; text-decoration: underline; font-family: serif; margin-bottom: 6px; text-transform: uppercase; }
-  .trust-header { text-align: center; border-bottom: 1px solid black; padding-bottom: 6px; margin-bottom: 8px; }
-  .trust-name { font-size: 9px; font-weight: 900; font-family: serif; }
-  .address-line { font-size: 7.5px; font-weight: bold; margin-top: 1px; }
-  .field-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-weight: bold; font-size: 8px; }
-  .field-row span.label { font-weight: 900; }
-  .penalty-box { text-align: center; font-weight: 900; font-size: 9px; border-top: 1px solid black; border-bottom: 1px solid black; padding: 5px 0; margin: 8px 0; }
-  .dup-info { font-size: 7.5px; font-weight: bold; border: 1px dashed #888; padding: 4px; border-radius: 2px; margin-bottom: 8px; line-height: 1.4; }
-  .hindi-heading { text-align: center; font-weight: 900; font-size: 8px; text-decoration: underline; margin-bottom: 4px; }
-  .hindi-para { font-size: 7px; line-height: 1.4; margin-bottom: 4px; }
-  .mitra-section { border-top: 1px dashed black; padding-top: 6px; margin-top: 6px; font-weight: bold; font-size: 8px; line-height: 1.5; }
-  .sig-box { border: 1px solid black; height: 36px; display: flex; align-items: center; justify-content: center; margin-top: 18px; border-radius: 2px; }
-  .sig-text { color: #ccc; font-weight: bold; text-transform: uppercase; font-size: 8px; letter-spacing: 1px; }
-</style></head><body>
-<div class="container">
-  <div class="logo-circle"><img src="${LOGO_BASE64}" alt="Logo"/></div>
-  <div class="title">Penalty Receipt</div>
-  <div class="trust-header">
-    <div class="trust-name">Baijnaath Kesar Bai Sewa Trust</div>
-    <div class="address-line">1-A Mangla Vihar New PAC Line</div>
-    <div class="address-line">Kanpur Nagar – 208015</div>
-  </div>
-  <div style="margin-bottom:8px;">
-    <div class="field-row"><span><span class="label">Date :-</span> ${record.issuedAt}</span></div>
-    <div class="field-row"><span><span class="label">Card ID No :-</span> ${c?.id || "—"}</span></div>
-    <div class="field-row"><span><span class="label">Camp Area :-</span> ${c?.area || "Mangla Vihar"}</span></div>
-    <div class="field-row"><span><span class="label">Mukhiya Name :-</span> ${c?.mukhiyaName || c?.clientName || "—"}</span></div>
-    <div class="field-row"><span><span class="label">Full Address :-</span> ${c?.address || "—"}</span></div>
-    <div class="field-row"><span><span class="label">District :-</span> ${c?.district || "Kanpur Nagar"}</span></div>
-    <div class="field-row">
-      <span><span class="label">Pin Code :-</span> ${c?.pincode || "208015"}</span>
-      <span><span class="label">Total Member :-</span> ${c?.totalMember || 1}</span>
-    </div>
-  </div>
-  <div class="penalty-box">Penalty Amount :- Rs. ${PENALTY_AMOUNT}.00</div>
-  <div class="dup-info">
-    Receipt No :- ${record.receiptNo}<br/>
-    Payment Method :- ${record.paymentMethod === "online" ? "Online" : "Offline (Cash)"}<br/>
-    ${record.paymentRef ? `Ref :- ${record.paymentRef}<br/>` : ""}
-    Status :- Paid
-  </div>
-  <div class="hindi-heading">महत्वपूर्ण जानकारी</div>
-  <p class="hindi-para">कार्ड का उपयोग करने से पूर्व, कृपया कार्ड के साथ दिए किए गए लेटर को ध्यानपूर्वक अवश्य पढ़ें।</p>
-  <p class="hindi-para">किसी भी प्रकार की समस्या या सहायता हेतु, कृपया कार्ड के साथ दिए गए हेल्पलाइन नंबर 8303902030 पर संपर्क करें।</p>
-  <div class="mitra-section">
-    <div>Ayoush Mitra Name :- ${c?.employeeName || "—"}</div>
-    <div>Ayoush Mitra ID No :- ${c?.employeeId || "—"}</div>
-  </div>
-  <div class="sig-box"><span class="sig-text">Signature</span></div>
-</div>
-</body></html>`;
-
-    const b64 = btoa(unescape(encodeURIComponent(htmlContent)));
-    const playStoreUrl = "https://play.google.com/store/apps/details?id=ru.a402d.rawbtprinter";
-    const rawbtIntent = `intent:#Intent;action=ru.a402d.rawbtprinter.action.PRINT;category=android.intent.category.DEFAULT;type=text/html;S.text=${b64};S.ru.a402d.rawbtprinter.EXTRA_B64=true;S.browser_fallback_url=${encodeURIComponent(playStoreUrl)};end;`;
-
-    const userAgent = navigator.userAgent || "";
-    const isAndroid = /Android/i.test(userAgent);
-    if (!isAndroid) {
-      toastWarn("RawBT printing works on Android phones. Use normal Print on desktop.");
-      return;
-    }
-    window.location.href = rawbtIntent;
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col max-h-[92vh]">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
-          <div>
-            <h3 className="text-sm font-black text-[#22333B]">Penalty Receipt</h3>
-            <p className="text-xs text-gray-400 font-mono mt-0.5">{record.receiptNo}</p>
-          </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-700 transition-colors"><X size={18} /></button>
-        </div>
-        <div className="flex-1 overflow-y-auto bg-gray-50 p-5 flex justify-center">
-          <PenaltyReceiptPreview card={record.card} receiptRecord={record} />
-        </div>
-        <div className="px-5 py-4 border-t border-gray-100 flex flex-col sm:flex-row items-center gap-2 shrink-0 w-full">
-          <button onClick={onClose} className="w-full sm:w-auto py-2 px-4 border border-gray-200 rounded-xl text-xs font-bold text-gray-600 bg-white hover:bg-gray-50 text-center whitespace-nowrap">Close</button>
-          <div className="flex flex-1 gap-2 w-full">
-            <button onClick={handlePrint} className="flex-1 py-2 bg-[#22333B] text-white rounded-xl text-xs font-black hover:bg-[#1a2830] flex items-center justify-center gap-1.5 whitespace-nowrap">
-              <Printer size={13} /> Print
-            </button>
-            <button onClick={handleRawBtPrint} className="flex-1 py-2 bg-[#F68E5F] text-white rounded-xl text-xs font-black hover:bg-[#ff7637] flex items-center justify-center gap-1.5 whitespace-nowrap">
-              RawBT Print
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
+// Import modular components
+import StatTile from "./components/StatTile";
+import SettlementSlipPreview from "./components/SettlementSlipPreview";
+import DuplicateReceiptModal from "./components/DuplicateReceiptModal";
+import ViewPenaltyModal from "./components/ViewPenaltyModal";
+import {
+  PENALTY_AMOUNT,
+  getFormattedCurrentDate,
+  calculateSettlement,
+  toDupCardShape,
+} from "./components/vitranUtils";
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 const AyushVitran = () => {
@@ -848,10 +49,11 @@ const AyushVitran = () => {
   const [exportedCards, setExportedCards] = useState([]);
   const [exportedLoading, setExportedLoading] = useState(false);
   const [exportedPage, setExportedPage] = useState(1);
-  const [exportedItemsPerPage] = useState(25);
+  const [exportedItemsPerPage, setExportedItemsPerPage] = useState(25);
   const [exportedTotalItems, setExportedTotalItems] = useState(0);
   const [exportedTotalPages, setExportedTotalPages] = useState(1);
   const [cardSearch, setCardSearch] = useState("");
+  const [debouncedCardSearch, setDebouncedCardSearch] = useState("");
   const [cardFilterEmployee, setCardFilterEmployee] = useState("");
   const [selectedCardForDup, setSelectedCardForDup] = useState(null);
   // Map of employeeId -> name for display
@@ -863,12 +65,21 @@ const AyushVitran = () => {
   const [dupFilterMethod, setDupFilterMethod] = useState("");
   const [viewingReceipt, setViewingReceipt] = useState(null);
 
+  // Debounce card search input to reset page and trigger server-side fetch
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedCardSearch(cardSearch.trim());
+      setExportedPage(1);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [cardSearch]);
+
   // Fetch exported (printed) cards from API
   const fetchExportedCards = useCallback(async () => {
     setExportedLoading(true);
     try {
       const params = { page: exportedPage, limit: exportedItemsPerPage, sort: "-createdAt" };
-      if (cardSearch.trim()) params.search = cardSearch.trim();
+      if (debouncedCardSearch) params.search = debouncedCardSearch;
       const res = await apiService.getPrintedCards(params);
       const { raw, total, pages } = parseHealthCardsResponse(res);
       const normalized = raw.map(normalizeHealthCard);
@@ -898,11 +109,13 @@ const AyushVitran = () => {
     } finally {
       setExportedLoading(false);
     }
-  }, [exportedPage, exportedItemsPerPage]);
+  }, [exportedPage, exportedItemsPerPage, debouncedCardSearch]);
 
   useEffect(() => {
-    if (activeTab === "exported" && userRole !== "Employee") fetchExportedCards();
-  }, [activeTab, exportedPage, userRole]);
+    if (activeTab === "exported" && userRole !== "Employee") {
+      fetchExportedCards();
+    }
+  }, [activeTab, exportedPage, exportedItemsPerPage, debouncedCardSearch, userRole]);
 
   // Load auth
   useEffect(() => {
@@ -1195,14 +408,20 @@ const AyushVitran = () => {
     exportedCards.map(c => toDupCardShape(c, createdByMap)),
     [exportedCards, createdByMap]);
 
-  // Unique employee options for filter dropdown (from API data)
+  // Unique employee options for filter dropdown (from employees list & loaded cards)
   const uniqueEmployeesForFilter = useMemo(() => {
     const seen = new Map();
+    employees.forEach(emp => {
+      const id = emp._rawId || emp.id;
+      if (id) seen.set(String(id).toLowerCase(), emp.name);
+    });
     mappedExportedCards.forEach(c => {
-      if (c.employeeId && !seen.has(c.employeeId)) seen.set(c.employeeId, c.employeeName);
+      if (c.employeeId && !seen.has(String(c.employeeId).toLowerCase())) {
+        seen.set(String(c.employeeId).toLowerCase(), c.employeeName || c.employeeId);
+      }
     });
     return [...seen.entries()].map(([id, name]) => ({ id, name }));
-  }, [mappedExportedCards]);
+  }, [employees, mappedExportedCards]);
 
   const filteredCards = useMemo(() => {
     const q = cardSearch.toLowerCase().trim();
@@ -1213,7 +432,8 @@ const AyushVitran = () => {
         c.mobile.includes(q) ||
         c.employeeName.toLowerCase().includes(q) ||
         c.receiptNo.toLowerCase().includes(q);
-      const matchEmp = !cardFilterEmployee || c.employeeId === cardFilterEmployee;
+      const matchEmp = !cardFilterEmployee || 
+        String(c.employeeId).toLowerCase() === String(cardFilterEmployee).toLowerCase();
       return matchSearch && matchEmp;
     });
   }, [mappedExportedCards, cardSearch, cardFilterEmployee]);
@@ -1475,7 +695,7 @@ const AyushVitran = () => {
                 totalPages={exportedTotalPages}
                 onPageChange={setExportedPage}
                 itemsPerPage={exportedItemsPerPage}
-                onItemsPerPageChange={() => {}}
+                onItemsPerPageChange={val => { setExportedItemsPerPage(val); setExportedPage(1); }}
                 totalItems={exportedTotalItems}
                 pageSizeOptions={[25, 50, 100]}
               />
