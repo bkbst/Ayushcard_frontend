@@ -105,8 +105,8 @@ const DuplicateReceiptModal = ({ card, onClose, onIssued }) => {
   <p class="hindi-para">कार्ड का उपयोग करने से पूर्व, कृपया कार्ड के साथ दिए किए गए लेटर को ध्यानपूर्वक अवश्य पढ़ें।</p>
   <p class="hindi-para">किसी भी प्रकार की समस्या या सहायता हेतु, कृपया कार्ड के साथ दिए गए हेल्पलाइन नंबर 8303902030 पर संपर्क करें।</p>
   <div class="mitra-section">
-    <div>Ayoush Mitra Name :- ${c.employeeName || "—"}</div>
-    <div>Ayoush Mitra ID No :- ${c.employeeId || "—"}</div>
+    <div>Ayush Mitra Name :- ${c.employeeName || "—"}</div>
+    <div>Ayush Mitra ID No :- ${c.employeeId || "—"}</div>
   </div>
   <div class="sig-box"><span class="sig-text">Signature</span></div>
 </div>
@@ -171,8 +171,8 @@ const DuplicateReceiptModal = ({ card, onClose, onIssued }) => {
   <p class="hindi-para">कार्ड का उपयोग करने से पूर्व, कृपया कार्ड के साथ दिए किए गए लेटर को ध्यानपूर्वक अवश्य पढ़ें।</p>
   <p class="hindi-para">किसी भी प्रकार की समस्या या सहायता हेतु, कृपया कार्ड के साथ दिए गए हेल्पलाइन नंबर 8303902030 पर संपर्क करें।</p>
   <div class="mitra-section">
-    <div>Ayoush Mitra Name :- ${c.employeeName || "—"}</div>
-    <div>Ayoush Mitra ID No :- ${c.employeeId || "—"}</div>
+    <div>Ayush Mitra Name :- ${c.employeeName || "—"}</div>
+    <div>Ayush Mitra ID No :- ${c.employeeId || "—"}</div>
   </div>
   <div class="sig-box"><span class="sig-text">Signature</span></div>
 </div>
