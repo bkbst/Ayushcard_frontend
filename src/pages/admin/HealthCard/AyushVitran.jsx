@@ -457,20 +457,6 @@ const AyushVitran = () => {
     exportedCards.map(c => toDupCardShape(c, createdByMap)),
     [exportedCards, createdByMap]);
 
-  // Unique employee options for filter dropdown (from employees list & loaded cards)
-  const uniqueEmployeesForFilter = useMemo(() => {
-    const seen = new Map();
-    employees.forEach(emp => {
-      const id = emp._rawId || emp.id;
-      if (id) seen.set(String(id).toLowerCase(), emp.name);
-    });
-    mappedExportedCards.forEach(c => {
-      if (c.employeeId && !seen.has(String(c.employeeId).toLowerCase())) {
-        seen.set(String(c.employeeId).toLowerCase(), c.employeeName || c.employeeId);
-      }
-    });
-    return [...seen.entries()].map(([id, name]) => ({ id, name }));
-  }, [employees, mappedExportedCards]);
 
   const filteredCards = useMemo(() => {
     const q = cardSearch.toLowerCase().trim();
@@ -668,8 +654,6 @@ const AyushVitran = () => {
             <StatTile icon={Check} label="Payments Collected" value={`₹${paidCount * PENALTY_AMOUNT}`} color="bg-green-100 text-green-600" bg="bg-green-50 border-green-100" />
             <StatTile icon={Clock} label="Pending Payments" value={pendingCount} color="bg-amber-100 text-amber-600" bg="bg-amber-50 border-amber-100" />
           </div>
-
-          {/* Filters */}
           <div className="flex flex-wrap items-center gap-3 mb-4 shrink-0">
             <div className="relative w-full sm:flex-1 sm:min-w-[180px]">
               <input type="text" placeholder="Search by card no., name, mobile, employee..."
@@ -677,25 +661,12 @@ const AyushVitran = () => {
                 className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#F68E5F] focus:border-[#F68E5F]" />
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             </div>
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <select value={cardFilterEmployee} onChange={e => setCardFilterEmployee(e.target.value)}
-                className="flex-1 sm:flex-initial text-xs border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#F68E5F] text-gray-600 bg-white">
-                <option value="">All Employees</option>
-                {uniqueEmployeesForFilter.map(emp => (
-                  <option key={emp.id} value={emp.id}>{emp.name}</option>
-                ))}
-              </select>
-              <button onClick={fetchExportedCards} disabled={exportedLoading}
-                className="shrink-0 flex items-center gap-1 text-xs border border-gray-200 rounded-xl px-3 py-2 bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-50">
-                <RefreshCw size={12} className={exportedLoading ? "animate-spin text-[#F68E5F]" : ""} /> Refresh
+            {cardSearch && (
+              <button onClick={() => setCardSearch("")}
+                className="shrink-0 text-xs text-gray-400 hover:text-gray-600 px-3 py-2 border border-gray-200 rounded-xl bg-white flex items-center gap-1 shadow-sm transition-all hover:bg-gray-50">
+                <X size={12} /> Clear
               </button>
-              {(cardSearch || cardFilterEmployee) && (
-                <button onClick={() => { setCardSearch(""); setCardFilterEmployee(""); }}
-                  className="shrink-0 text-xs text-gray-400 hover:text-gray-600 px-2 py-2 border border-gray-200 rounded-xl bg-white flex items-center gap-1">
-                  <X size={12} /> Clear
-                </button>
-              )}
-            </div>
+            )}
             <span className="text-xs text-gray-400 font-semibold sm:ml-auto w-full sm:w-auto text-right">{exportedTotalItems > 0 ? `${exportedTotalItems} total` : `${filteredCards.length} cards`}</span>
           </div>
 
