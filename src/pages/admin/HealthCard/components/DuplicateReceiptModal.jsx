@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import {
-  X, Check, ChevronRight, ChevronLeft, Printer, AlertCircle, Banknote, Wifi, Clock
+  X, Check, ChevronRight, ChevronLeft, Printer, AlertCircle, Banknote, Wifi, Clock, Camera, Upload
 } from "lucide-react";
 import { LOGO_BASE64 } from "../../../../utils/logoBase64";
+import { useToast } from "../../../../components/ui/Toast";
 import {
   PENALTY_AMOUNT,
   generateDupReceiptNo,
@@ -12,6 +13,7 @@ import {
 import PenaltyReceiptPreview from "./PenaltyReceiptPreview";
 
 const DuplicateReceiptModal = ({ card, onClose, onIssued }) => {
+  const { toastWarn, toastError } = useToast();
   const [step, setStep] = useState(1);
   const [paymentMethod, setPaymentMethod] = useState("offline");
   const [paymentRef, setPaymentRef] = useState("");
@@ -19,9 +21,98 @@ const DuplicateReceiptModal = ({ card, onClose, onIssued }) => {
   const [generatedRecord, setGeneratedRecord] = useState(null);
   const [isPrinted, setIsPrinted] = useState(false);
 
+  // Offline payment proof image state
+  const [offlineImage, setOfflineImage] = useState(null);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [cameraError, setCameraError] = useState("");
+  const videoRef = React.useRef(null);
+  const streamRef = React.useRef(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, []);
+
+  const startCamera = async () => {
+    setIsCameraOpen(true);
+    setCameraError("");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err) {
+      console.error("Camera access failed:", err);
+      setCameraError("Could not access camera. Please upload file instead.");
+      setIsCameraOpen(false);
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    setIsCameraOpen(false);
+  };
+
+  const capturePhoto = () => {
+    if (videoRef.current) {
+      const video = videoRef.current;
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.6);
+      setOfflineImage(dataUrl);
+      stopCamera();
+    }
+  };
+
+  const compressAndSetImage = (file) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const maxDim = 500;
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          }
+        } else {
+          if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.6);
+        setOfflineImage(dataUrl);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleGenerate = () => {
     if (paymentMethod === "online" && !paymentRef.trim()) {
-      alert("Please enter a payment reference for online payment.");
+      toastWarn("Please enter a payment reference for online payment.");
+      return;
+    }
+    if (paymentMethod === "offline" && !offlineImage) {
+      toastWarn("Please upload or capture a payment receipt photo for offline payment.");
       return;
     }
     const record = {
@@ -39,6 +130,7 @@ const DuplicateReceiptModal = ({ card, onClose, onIssued }) => {
       issuedAt: getFormattedCurrentDate(),
       issuedDateTime: getDateTime(),
       card,
+      offlineImage, // Save offline payment image proof
     };
     setGeneratedRecord(record);
     setStep(3);
@@ -48,7 +140,7 @@ const DuplicateReceiptModal = ({ card, onClose, onIssued }) => {
     if (!generatedRecord) return;
     const c = generatedRecord.card;
     const pw = window.open("", "_blank", "width=400,height=820,status=no,toolbar=no,menubar=no");
-    if (!pw) { alert("Pop-up blocked! Allow pop-ups to print."); return; }
+    if (!pw) { toastError("Pop-up blocked! Allow pop-ups to print."); return; }
     pw.document.open();
     pw.document.write(`
 <!DOCTYPE html><html><head><title>Penalty Receipt - ${generatedRecord.receiptNo}</title>
@@ -185,7 +277,7 @@ const DuplicateReceiptModal = ({ card, onClose, onIssued }) => {
     const userAgent = navigator.userAgent || "";
     const isAndroid = /Android/i.test(userAgent);
     if (!isAndroid) {
-      alert("RawBT printing works on Android phones. Use normal Print on desktop.");
+      toastWarn("RawBT printing works on Android phones. Use normal Print on desktop.");
       return;
     }
     window.location.href = rawbtIntent;
@@ -302,6 +394,52 @@ const DuplicateReceiptModal = ({ card, onClose, onIssued }) => {
                   ))}
                 </div>
               </div>
+
+              {paymentMethod === "offline" && (
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3">
+                  <p className="text-xs font-bold text-gray-700">Proof of Payment / Cash Photo <span className="text-red-500">*</span></p>
+                  
+                  {offlineImage ? (
+                    <div className="relative w-full h-40 bg-black rounded-lg overflow-hidden border border-gray-300 flex items-center justify-center">
+                      <img src={offlineImage} alt="Payment Receipt" className="h-full object-contain" />
+                      <button type="button" onClick={() => setOfflineImage(null)}
+                        className="absolute top-2 right-2 p-1.5 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors shadow">
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ) : isCameraOpen ? (
+                    <div className="space-y-3">
+                      <div className="relative w-full h-48 bg-black rounded-lg overflow-hidden border border-gray-300">
+                        <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover"></video>
+                      </div>
+                      <div className="flex gap-2">
+                        <button type="button" onClick={capturePhoto}
+                          className="flex-1 py-1.5 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 transition-colors flex items-center justify-center gap-1">
+                          <Check size={13} /> Capture
+                        </button>
+                        <button type="button" onClick={stopCamera}
+                          className="py-1.5 px-3 bg-gray-500 text-white rounded-lg text-xs font-bold hover:bg-gray-600 transition-colors">
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <button type="button" onClick={startCamera}
+                        className="flex-1 py-2 bg-orange-100 text-[#F68E5F] rounded-lg text-xs font-bold border border-orange-200 hover:bg-[#F68E5F] hover:text-white transition-all flex items-center justify-center gap-1.5">
+                        <Camera size={14} /> Take Photo (Camera)
+                      </button>
+                      <label className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg text-xs font-bold border border-gray-200 hover:bg-gray-200 cursor-pointer transition-all flex items-center justify-center gap-1.5 text-center">
+                        <Upload size={14} /> Upload Image
+                        <input type="file" accept="image/*" onChange={e => {
+                          if (e.target.files?.[0]) compressAndSetImage(e.target.files[0]);
+                        }} className="hidden" />
+                      </label>
+                    </div>
+                  )}
+                  {cameraError && <p className="text-[10px] text-red-500 font-semibold">{cameraError}</p>}
+                </div>
+              )}
 
               {paymentMethod === "online" && (
                 <div>

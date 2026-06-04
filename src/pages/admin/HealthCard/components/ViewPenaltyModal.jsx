@@ -1,14 +1,17 @@
 import React from "react";
 import { X, Printer } from "lucide-react";
 import { LOGO_BASE64 } from "../../../../utils/logoBase64";
+import { useToast } from "../../../../components/ui/Toast";
 import { PENALTY_AMOUNT } from "./vitranUtils";
 import PenaltyReceiptPreview from "./PenaltyReceiptPreview";
 
 const ViewPenaltyModal = ({ record, onClose }) => {
+  const { toastWarn, toastError } = useToast();
+
   const handlePrint = () => {
     const c = record.card;
     const pw = window.open("", "_blank", "width=400,height=820,status=no,toolbar=no,menubar=no");
-    if (!pw) { alert("Pop-up blocked!"); return; }
+    if (!pw) { toastError("Pop-up blocked! Allow pop-ups to print."); return; }
     pw.document.open();
     pw.document.write(`
 <!DOCTYPE html><html><head><title>Penalty Receipt - ${record.receiptNo}</title>
@@ -138,7 +141,7 @@ const ViewPenaltyModal = ({ record, onClose }) => {
     const userAgent = navigator.userAgent || "";
     const isAndroid = /Android/i.test(userAgent);
     if (!isAndroid) {
-      alert("RawBT printing works on Android phones. Use normal Print on desktop.");
+      toastWarn("RawBT printing works on Android phones. Use normal Print on desktop.");
       return;
     }
     window.location.href = rawbtIntent;
