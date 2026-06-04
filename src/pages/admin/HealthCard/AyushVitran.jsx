@@ -3,7 +3,7 @@ import {
   Search, Printer, FileText, X, Calendar, RefreshCw,
   CreditCard, Copy, ChevronRight, ChevronLeft, Check,
   Wifi, Banknote, AlertCircle, Clock, Loader2,
-  Users, Receipt, ClipboardList, Eye
+  Users, Receipt, ClipboardList, Eye, Trash2
 } from "lucide-react";
 import apiService from "../../../api/service";
 import { useToast } from "../../../components/ui/Toast";
@@ -196,6 +196,16 @@ const AyushVitran = () => {
       return updated;
     });
   }, []);
+
+  // Delete duplicate receipt from localStorage
+  const deleteDupReceipt = useCallback((receiptNo) => {
+    setDupReceipts(prev => {
+      const updated = prev.filter(r => r.receiptNo !== receiptNo);
+      try { localStorage.setItem("ayush_dup_receipts", JSON.stringify(updated)); } catch { }
+      return updated;
+    });
+    toastSuccess("Duplicate receipt deleted successfully");
+  }, [toastSuccess]);
 
   // Fallback employees
   const fallbackEmployees = useMemo(() => {
@@ -824,10 +834,16 @@ const AyushVitran = () => {
                           <span className="text-[10px] text-gray-400 font-medium">{rec.issuedAt}</span>
                         </td>
                         <td className="py-3 px-4 text-center">
-                          <button onClick={() => setViewingReceipt(rec)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-purple-50 text-purple-600 border border-purple-100 hover:bg-purple-500 hover:text-white transition-all shadow-sm">
-                            <Eye size={11} /> View
-                          </button>
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button onClick={() => setViewingReceipt(rec)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-purple-50 text-purple-600 border border-purple-100 hover:bg-purple-500 hover:text-white transition-all shadow-sm">
+                              <Eye size={11} /> View
+                            </button>
+                            <button onClick={() => deleteDupReceipt(rec.receiptNo)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-rose-50 text-rose-600 border border-rose-100 hover:bg-rose-500 hover:text-white transition-all shadow-sm">
+                              <Trash2 size={11} /> Delete
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
