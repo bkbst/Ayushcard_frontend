@@ -677,9 +677,9 @@ const AyushVitran = () => {
                         <td className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap">{card.clientName}</td>
                         <td className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap">{card.mobile}</td>
                         <td className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap">{card.employeeName || "—"}</td>
-                        <td className="py-3 px-4 text-sm font-normal text-[#22333B] text-right whitespace-nowrap">₹{Number(card.amount || 0).toFixed(2)}</td>
-                        <td className="py-3 px-4 text-sm font-normal text-[#22333B] whitespace-nowrap">{card.exportDate}</td>
-                        <td className="py-3 px-4">
+                        <td className="py-3 px-4 text-sm font-normal text-[#22333B] text-center whitespace-nowrap">₹{Number(card.amount || 0).toFixed(2)}</td>
+                        <td className="py-3 px-4 text-sm font-normal text-[#22333B] text-center whitespace-nowrap">{card.exportDate}</td>
+                        <td className="py-3 px-4 text-center">
                           <button
                             onClick={() => setSelectedCardForDup(card)}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-amber-50 text-amber-600 border border-amber-100 hover:bg-amber-500 hover:text-white transition-all shadow-sm"
