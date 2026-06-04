@@ -112,10 +112,10 @@ const AyushVitran = () => {
   }, [exportedPage, exportedItemsPerPage, debouncedCardSearch]);
 
   useEffect(() => {
-    if (activeTab === "exported" && userRole !== "Employee") {
+    if (activeTab === "exported") {
       fetchExportedCards();
     }
-  }, [activeTab, exportedPage, exportedItemsPerPage, debouncedCardSearch, userRole]);
+  }, [activeTab, exportedPage, exportedItemsPerPage, debouncedCardSearch]);
 
   // Load auth
   useEffect(() => {
@@ -126,7 +126,11 @@ const AyushVitran = () => {
         setCurrentUser({ name: u.name || "Employee", email: u.email || "N/A", id: u.employeeId || u._id || "EMP-1000", location: u.location || "Mangla Vihar" });
       } catch { }
     }
-    setUserRole(localStorage.getItem("userRole") || "Admin");
+    const role = localStorage.getItem("userRole") || "Admin";
+    setUserRole(role);
+    if (role === "Employee") {
+      setActiveTab("settlement");
+    }
   }, []);
 
   // Load duplicate receipts from localStorage
@@ -457,11 +461,20 @@ const AyushVitran = () => {
     return null;
   }, [userRole, currentUser]);
 
-  const TABS = [
-    { id: "employees", label: "Employee List", Icon: Users },
-    { id: "exported", label: "Exported Cards", Icon: CreditCard },
-    { id: "duplicates", label: "Duplicate Receipts", Icon: Receipt },
-  ];
+  const TABS = useMemo(() => {
+    if (userRole === "Employee") {
+      return [
+        { id: "settlement", label: "My Settlement", Icon: FileText },
+        { id: "exported", label: "Penalty Receipts", Icon: CreditCard },
+        { id: "duplicates", label: "Duplicate Receipts", Icon: Receipt },
+      ];
+    }
+    return [
+      { id: "employees", label: "Employee List", Icon: Users },
+      { id: "exported", label: "Penalty Receipts", Icon: CreditCard },
+      { id: "duplicates", label: "Duplicate Receipts", Icon: Receipt },
+    ];
+  }, [userRole]);
 
   return (
     <div className="flex flex-col h-[calc(100vh-170px)] print:h-auto" style={{ fontFamily: "Inter, sans-serif" }}>
@@ -481,21 +494,19 @@ const AyushVitran = () => {
       </div>
 
       {/* Tabs */}
-      {userRole !== "Employee" && (
-        <div className="flex items-center gap-1 mb-4 bg-gray-100 p-1 rounded-xl shrink-0 no-print w-full sm:w-fit overflow-x-auto scrollbar-none flex-nowrap">
-          {TABS.map(({ id, label, Icon }) => (
-            <button key={id} onClick={() => setActiveTab(id)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all shrink-0
-                ${activeTab === id ? "bg-white text-[#22333B] shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
-              <Icon size={13} />
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="flex items-center gap-1 mb-4 bg-gray-100 p-1 rounded-xl shrink-0 no-print w-full sm:w-fit overflow-x-auto scrollbar-none flex-nowrap">
+        {TABS.map(({ id, label, Icon }) => (
+          <button key={id} onClick={() => setActiveTab(id)}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all shrink-0
+              ${activeTab === id ? "bg-white text-[#22333B] shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
+            <Icon size={13} />
+            {label}
+          </button>
+        ))}
+      </div>
 
       {/* ═══ TAB 1: EMPLOYEE LIST ═══ */}
-      {(userRole === "Employee" || activeTab === "employees") && userRole !== "Employee" && (
+      {activeTab === "employees" && userRole !== "Employee" && (
         <>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 shrink-0 no-print">
             <div className="relative w-full sm:w-80">
@@ -572,7 +583,7 @@ const AyushVitran = () => {
       )}
 
       {/* Employee self-view */}
-      {userRole === "Employee" && selfEmployee && (
+      {activeTab === "settlement" && userRole === "Employee" && selfEmployee && (
         <div className="flex-1 overflow-y-auto no-print flex items-start justify-center py-4">
           <div className="bg-white border border-gray-200 p-6 rounded-2xl shadow-sm max-w-md w-full flex flex-col items-center">
             <div className="w-12 h-12 rounded-full bg-orange-50 text-[#F68E5F] flex items-center justify-center font-black text-lg mb-2">{selfEmployee.name.charAt(0)}</div>
@@ -596,7 +607,7 @@ const AyushVitran = () => {
       )}
 
       {/* ═══ TAB 2: EXPORTED CARDS ═══ */}
-      {activeTab === "exported" && userRole !== "Employee" && (
+      {activeTab === "exported" && (
         <div className="flex flex-col flex-1 min-h-0 no-print">
           {/* Stat tiles */}
           <div className="flex overflow-x-auto scrollbar-none flex-nowrap sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4 pb-1 shrink-0 w-full">
@@ -705,7 +716,7 @@ const AyushVitran = () => {
       )}
 
       {/* ═══ TAB 3: DUPLICATE RECEIPTS ═══ */}
-      {activeTab === "duplicates" && userRole !== "Employee" && (
+      {activeTab === "duplicates" && (
         <div className="flex flex-col flex-1 min-h-0 no-print">
           {/* Mini stats */}
           <div className="flex overflow-x-auto scrollbar-none flex-nowrap sm:grid sm:grid-cols-3 gap-3 mb-4 pb-1 shrink-0 w-full">
