@@ -133,6 +133,51 @@ const AyushVitran = () => {
     }
   }, []);
 
+  // For Employee self performance tracking
+  const [employeeCardCount, setEmployeeCardCount] = useState(0);
+  const [employeeLocation, setEmployeeLocation] = useState("Mangla Vihar");
+  const [employeePincode, setEmployeePincode] = useState("208015");
+
+  useEffect(() => {
+    if (userRole === "Employee" && currentUser?.id) {
+      const fetchSelfPerformance = async () => {
+        try {
+          const res = await apiService.getEmployeeById(String(currentUser.id));
+          const u = res?.data?.user || res?.user || res?.data?.data || res?.data || res;
+          if (u) {
+            setEmployeeLocation(u.location || "Mangla Vihar");
+            setEmployeePincode(u.pincode || "208015");
+          }
+        } catch (e) {
+          console.warn("Failed to fetch employee details:", e);
+        }
+
+        try {
+          const perfRes = await apiService.getReportsEmployeePerformance();
+          const perfData = perfRes?.data || perfRes || [];
+          if (Array.isArray(perfData)) {
+            const rawId = String(currentUser.id).toLowerCase();
+            const email = String(currentUser.email || "").toLowerCase();
+            const name = String(currentUser.name || "").toLowerCase();
+
+            const match = perfData.find(p => 
+              (p.employeeId && String(p.employeeId).toLowerCase() === rawId) ||
+              (p._id && String(p._id).toLowerCase() === rawId) ||
+              (p.name && String(p.name).toLowerCase() === name) ||
+              (p.email && String(p.email).toLowerCase() === email)
+            );
+            if (match) {
+              setEmployeeCardCount(Number(match.cardsIssued || match.count || match.totalCards || 0));
+            }
+          }
+        } catch (perfErr) {
+          console.warn("Failed to fetch self performance count:", perfErr);
+        }
+      };
+      fetchSelfPerformance();
+    }
+  }, [userRole, currentUser]);
+
   // Load duplicate receipts from localStorage
   useEffect(() => {
     try {
@@ -456,10 +501,17 @@ const AyushVitran = () => {
 
   const selfEmployee = useMemo(() => {
     if (userRole === "Employee" && currentUser) {
-      return { id: currentUser.id, name: currentUser.name, email: currentUser.email, location: currentUser.location || "Mangla Vihar", totalCards: 67, pincode: "208015" };
+      return {
+        id: currentUser.id,
+        name: currentUser.name,
+        email: currentUser.email,
+        location: currentUser.location || employeeLocation || "Mangla Vihar",
+        totalCards: employeeCardCount,
+        pincode: currentUser.pincode || employeePincode || "208015"
+      };
     }
     return null;
-  }, [userRole, currentUser]);
+  }, [userRole, currentUser, employeeCardCount, employeeLocation, employeePincode]);
 
   const TABS = useMemo(() => {
     if (userRole === "Employee") {
