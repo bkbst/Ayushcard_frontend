@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Search, X, CreditCard, Copy, Check,
   Wifi, Banknote, Clock, Loader2,
-  Receipt, ClipboardList, Eye, Trash2
+  Receipt, ClipboardList, Eye, Trash2, FileText, PackageCheck
 } from "lucide-react";
 import apiService from "../../../api/service";
 import { useToast } from "../../../components/ui/Toast";
@@ -16,15 +16,19 @@ import {
 import StatTile from "./components/StatTile";
 import DuplicateReceiptModal from "./components/DuplicateReceiptModal";
 import ViewPenaltyModal from "./components/ViewPenaltyModal";
+import VitranModal from "./components/VitranModal";
+import ViewVitranModal from "./components/ViewVitranModal";
 import {
   PENALTY_AMOUNT,
   toDupCardShape,
 } from "./components/vitranUtils";
 
+const VITRAN_STORAGE_KEY = "ayush_vitran_records";
+
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 const AyushVitran = () => {
   const { toastSuccess } = useToast();
-  const [activeTab, setActiveTab] = useState("exported");
+  const [activeTab, setActiveTab] = useState("receipts");
 
   // Exported Cards tab state — fetched from API
   const [exportedCards, setExportedCards] = useState([]);
@@ -37,8 +41,13 @@ const AyushVitran = () => {
   const [debouncedCardSearch, setDebouncedCardSearch] = useState("");
   const [cardFilterEmployee, setCardFilterEmployee] = useState("");
   const [selectedCardForDup, setSelectedCardForDup] = useState(null);
+  const [selectedCardForVitran, setSelectedCardForVitran] = useState(null);
+  const [viewingVitran, setViewingVitran] = useState(null);
   // Map of employeeId -> name for display
   const [createdByMap, setCreatedByMap] = useState({});
+
+  // Vitran (distribution) records
+  const [vitranRecords, setVitranRecords] = useState([]);
 
   // Duplicate receipts state
   const [dupReceipts, setDupReceipts] = useState([]);
@@ -93,10 +102,20 @@ const AyushVitran = () => {
   }, [exportedPage, exportedItemsPerPage, debouncedCardSearch]);
 
   useEffect(() => {
-    if (activeTab === "exported") {
+    if (activeTab === "receipts" || activeTab === "exported") {
       fetchExportedCards();
     }
-  }, [activeTab, exportedPage, exportedItemsPerPage, debouncedCardSearch]);
+  }, [activeTab, exportedPage, exportedItemsPerPage, debouncedCardSearch, fetchExportedCards]);
+
+  // Load vitran records from localStorage
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(VITRAN_STORAGE_KEY) || "[]");
+      setVitranRecords(stored);
+    } catch {
+      setVitranRecords([]);
+    }
+  }, []);
 
   // Load duplicate receipts from localStorage
   useEffect(() => {
@@ -126,6 +145,24 @@ const AyushVitran = () => {
     });
     toastSuccess("Duplicate receipt deleted successfully");
   }, [toastSuccess]);
+
+  const saveVitranRecord = useCallback((record) => {
+    setVitranRecords((prev) => {
+      const filtered = prev.filter((r) => r.cardId !== record.cardId);
+      const updated = [record, ...filtered];
+      try { localStorage.setItem(VITRAN_STORAGE_KEY, JSON.stringify(updated)); } catch { /* ignore */ }
+      return updated;
+    });
+  }, []);
+
+  const vitranMap = useMemo(() => {
+    const map = {};
+    vitranRecords.forEach((r) => { map[r.cardId] = r; });
+    return map;
+  }, [vitranRecords]);
+
+  const distributedCount = vitranRecords.length;
+  const pendingVitranCount = Math.max(0, (exportedTotalItems || exportedCards.length) - distributedCount);
 
   // Map exported cards to the dup-receipt shape for display & modal
   const mappedExportedCards = useMemo(() =>
@@ -161,6 +198,7 @@ const AyushVitran = () => {
   const pendingCount = dupReceipts.filter(r => r.paymentStatus === "pending").length;
 
   const TABS = useMemo(() => [
+    { id: "receipts", label: "Receipts", Icon: FileText },
     { id: "exported", label: "Penalty Receipts", Icon: CreditCard },
     { id: "duplicates", label: "Duplicate Receipts", Icon: Receipt },
   ], []);
@@ -187,7 +225,116 @@ const AyushVitran = () => {
         ))}
       </div>
 
-      {/* ═══ TAB: EXPORTED CARDS ═══ */}
+      {/* ═══ TAB: RECEIPTS (VITRAN) ═══ */}
+      {activeTab === "receipts" && (
+        <div className="flex flex-col flex-1 min-h-0 no-print">
+          <div className="flex overflow-x-auto scrollbar-none flex-nowrap sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4 pb-1 shrink-0 w-full">
+            <StatTile icon={CreditCard} label="Total Cards" value={exportedTotalItems || exportedCards.length} color="bg-blue-100 text-blue-600" bg="bg-blue-50 border-blue-100" />
+            <StatTile icon={PackageCheck} label="Distributed" value={distributedCount} color="bg-green-100 text-green-600" bg="bg-green-50 border-green-100" />
+            <StatTile icon={Clock} label="Pending Vitran" value={pendingVitranCount} color="bg-amber-100 text-amber-600" bg="bg-amber-50 border-amber-100" />
+            <StatTile icon={Receipt} label="Dup. Receipts" value={dupReceipts.length} color="bg-orange-100 text-[#F68E5F]" bg="bg-orange-50 border-orange-100" />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 mb-4 shrink-0">
+            <div className="relative w-full sm:flex-1 sm:min-w-[180px]">
+              <input type="text" placeholder="Search by card no., name, mobile, employee..."
+                value={cardSearch} onChange={e => setCardSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#F68E5F] focus:border-[#F68E5F]" />
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            </div>
+            {cardSearch && (
+              <button onClick={() => setCardSearch("")}
+                className="shrink-0 text-xs text-gray-400 hover:text-gray-600 px-3 py-2 border border-gray-200 rounded-xl bg-white flex items-center gap-1 shadow-sm">
+                <X size={12} /> Clear
+              </button>
+            )}
+            <span className="text-xs text-gray-400 font-semibold sm:ml-auto w-full sm:w-auto text-right">
+              {exportedTotalItems > 0 ? `${exportedTotalItems} total` : `${filteredCards.length} cards`}
+            </span>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden flex flex-col flex-1 min-h-0 shadow-sm">
+            {exportedLoading ? (
+              <div className="flex-1 flex flex-col items-center justify-center py-16 text-gray-400">
+                <Loader2 size={28} className="animate-spin text-[#F68E5F] mb-3" />
+                <p className="text-sm font-semibold">Loading cards...</p>
+              </div>
+            ) : (
+              <div className="overflow-y-auto overflow-x-auto flex-1">
+                <table className="w-full text-left border-collapse min-w-[780px]">
+                  <thead className="sticky top-0 z-10 bg-white border-b border-gray-100 shadow-sm">
+                    <tr className="text-gray-500 text-[11px] font-bold uppercase tracking-wide">
+                      <th className="py-3 px-4">#</th>
+                      <th className="py-3 px-4">Card ID</th>
+                      <th className="py-3 px-4">Client Name</th>
+                      <th className="py-3 px-4">Mobile</th>
+                      <th className="py-3 px-4">Ayush Mitra</th>
+                      <th className="py-3 px-4 text-center">Amount</th>
+                      <th className="py-3 px-4 text-center">Status</th>
+                      <th className="py-3 px-4 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredCards.map((card, i) => {
+                      const vitran = vitranMap[card.id];
+                      const isDistributed = Boolean(vitran);
+                      return (
+                        <tr key={card.id || i} className="border-b border-[#F3F4F6] hover:bg-[#F9FAFB] transition-colors">
+                          <td className="py-3 px-4 text-sm text-[#22333B]">{i + 1}</td>
+                          <td className="py-3 px-4 text-sm text-[#22333B] whitespace-nowrap font-mono">{card.id}</td>
+                          <td className="py-3 px-4 text-sm text-[#22333B] whitespace-nowrap">{card.clientName}</td>
+                          <td className="py-3 px-4 text-sm text-[#22333B] whitespace-nowrap">{card.mobile}</td>
+                          <td className="py-3 px-4 text-sm text-[#22333B] whitespace-nowrap">{card.employeeName || "—"}</td>
+                          <td className="py-3 px-4 text-sm text-[#22333B] text-center whitespace-nowrap">₹{Number(card.amount || 0).toFixed(2)}</td>
+                          <td className="py-3 px-4 text-center">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${isDistributed ? "bg-green-50 text-green-600 border-green-100" : "bg-amber-50 text-amber-600 border-amber-100"}`}>
+                              {isDistributed ? <><Check size={9} /> Distributed</> : <><Clock size={9} /> Pending</>}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              {isDistributed ? (
+                                <button onClick={() => setViewingVitran(vitran)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-green-50 text-green-600 border border-green-100 hover:bg-green-500 hover:text-white transition-all shadow-sm">
+                                  <Eye size={11} /> View
+                                </button>
+                              ) : (
+                                <button onClick={() => setSelectedCardForVitran(card)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-orange-50 text-[#F68E5F] border border-orange-100 hover:bg-[#F68E5F] hover:text-white transition-all shadow-sm">
+                                  <PackageCheck size={11} /> Vitran
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {filteredCards.length === 0 && !exportedLoading && (
+                      <tr><td colSpan={8} className="py-16 text-center text-gray-400 text-sm font-medium">No cards found.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {exportedTotalPages > 1 && (
+            <div className="mt-3 shrink-0">
+              <Pagination
+                currentPage={exportedPage}
+                totalPages={exportedTotalPages}
+                onPageChange={setExportedPage}
+                itemsPerPage={exportedItemsPerPage}
+                onItemsPerPageChange={val => { setExportedItemsPerPage(val); setExportedPage(1); }}
+                totalItems={exportedTotalItems}
+                pageSizeOptions={[25, 50, 100]}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ═══ TAB: PENALTY RECEIPTS ═══ */}
       {activeTab === "exported" && (
         <div className="flex flex-col flex-1 min-h-0 no-print">
           {/* Stat tiles */}
@@ -319,7 +466,7 @@ const AyushVitran = () => {
               <div className="flex-1 flex flex-col items-center justify-center py-16 text-gray-400">
                 <Receipt size={32} className="text-gray-200 mb-3" />
                 <p className="text-sm font-bold text-gray-500">No duplicate receipts yet</p>
-                <p className="text-xs text-gray-400 mt-1">Go to "Exported Cards" tab and click "Duplicate" to issue one</p>
+                <p className="text-xs text-gray-400 mt-1">Go to "Penalty Receipts" tab and click "Duplicate" to issue one</p>
               </div>
             ) : (
               <div className="overflow-y-auto overflow-x-auto flex-1">
@@ -386,6 +533,22 @@ const AyushVitran = () => {
             )}
           </div>
         </div>
+      )}
+
+      {/* ═══ VITRAN MODAL ═══ */}
+      {selectedCardForVitran && (
+        <VitranModal
+          card={selectedCardForVitran}
+          onClose={() => setSelectedCardForVitran(null)}
+          onDistributed={(record) => {
+            saveVitranRecord(record);
+            setSelectedCardForVitran(null);
+          }}
+        />
+      )}
+
+      {viewingVitran && (
+        <ViewVitranModal record={viewingVitran} onClose={() => setViewingVitran(null)} />
       )}
 
       {/* ═══ DUPLICATE RECEIPT WIZARD MODAL ═══ */}
