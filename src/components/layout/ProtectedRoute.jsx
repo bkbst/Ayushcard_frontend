@@ -1,22 +1,11 @@
 import React, { useEffect } from "react";
 import { Navigate, useNavigate, Outlet } from "react-router-dom";
-import { canSessionContinue, clearTokens } from "../../utils/auth";
+import { canSessionContinue, clearTokens, getStoredUserRole } from "../../utils/auth";
 
 const ProtectedRoute = ({ allowedRole }) => {
     const navigate = useNavigate();
 
-    // ── Helper: get current role ───────────────────────────────────────────
-    const getUserRole = () => {
-        const storedRole = localStorage.getItem("userRole");
-        if (storedRole) return storedRole.charAt(0).toUpperCase() + storedRole.slice(1).toLowerCase();
-
-        const user = JSON.parse(localStorage.getItem("user") || "{}");
-        if (user.role) return user.role.charAt(0).toUpperCase() + user.role.slice(1).toLowerCase();
-
-        return null;
-    };
-
-    const userRole = getUserRole();
+    const userRole = getStoredUserRole();
     const isAdminLike = userRole === "Admin" || userRole === "Editor";
 
     // ── Helper: clear tokens and go to /login ────────────────────────────────

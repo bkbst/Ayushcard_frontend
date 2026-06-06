@@ -6,6 +6,56 @@
 export const getStoredToken = () =>
     localStorage.getItem('token') || sessionStorage.getItem('token') || null;
 
+/** Storage that holds the active session token (local wins if both exist). */
+export const getActiveAuthStore = () =>
+    localStorage.getItem('token') ? localStorage : sessionStorage;
+
+/**
+ * Read the stored user from the same storage as the active token.
+ * Falls back to the other storage so stale localStorage user is not preferred
+ * when the session token lives in sessionStorage.
+ */
+export const getStoredUser = () => {
+    try {
+        const store = getActiveAuthStore();
+        const raw =
+            store.getItem('user') ||
+            localStorage.getItem('user') ||
+            sessionStorage.getItem('user');
+        if (!raw) return null;
+        return JSON.parse(raw);
+    } catch {
+        return null;
+    }
+};
+
+export const normalizeRole = (role) => {
+    if (!role) return null;
+    const s = String(role);
+    return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+};
+
+/** Role from the same storage as the active session token. */
+export const getStoredUserRole = () => {
+    const store = getActiveAuthStore();
+    const storedRole =
+        store.getItem('userRole') ||
+        localStorage.getItem('userRole') ||
+        sessionStorage.getItem('userRole');
+    if (storedRole) return normalizeRole(storedRole);
+    const user = getStoredUser();
+    if (user?.role) return normalizeRole(user.role);
+    return null;
+};
+
+export const updateStoredUser = (patch) => {
+    const store = getActiveAuthStore();
+    const current = getStoredUser() || {};
+    const merged = { ...current, ...patch };
+    store.setItem('user', JSON.stringify(merged));
+    return merged;
+};
+
 /**
  * Decode a JWT payload WITHOUT verifying the signature.
  * Verification is done server-side; we only need the `exp` claim client-side.

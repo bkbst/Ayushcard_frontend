@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff, ArrowLeft } from "lucide-react";
 import apiService from "../../api/service";
+import { clearTokens } from "../../utils/auth";
 
 const Login = () => {
   const [activeTab, setActiveTab] = useState("Admin");
@@ -46,13 +47,15 @@ const Login = () => {
         throw new Error("Access denied: You are an Employee/Editor. Please login from the Employee tab.");
       }
 
+      // Clear stale auth from both storages before saving the new session
+      clearTokens();
+
       // Save to localStorage (keep logged in) or sessionStorage (session only)
       const store = keepLogged ? localStorage : sessionStorage;
       store.setItem("token", accessToken);
       store.setItem("user", JSON.stringify(userData));
       if (refreshToken) store.setItem("refreshToken", refreshToken);
-
-      localStorage.setItem("userRole", userRole);
+      store.setItem("userRole", userRole);
 
       if (isEmployee) {
         navigate("/employee");

@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Bell, LogOut, ChevronDown, Mail, Phone, Building, Calendar, ShieldCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import apiService from '../../api/service';
+import { clearTokens, getStoredUser, updateStoredUser } from '../../utils/auth';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const getInitials = (name) => {
@@ -20,32 +22,39 @@ const getGreeting = () => {
   return 'Good Evening';
 };
 
-// API response shape:
-// { success, message, data: { user: { name, role, email, ... }, accessToken } }
-// Login.jsx stores data.data.user as 'user' key in storage
-const getStoredUser = () => {
-  try {
-    const raw = localStorage.getItem('user') || sessionStorage.getItem('user');
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-};
-
-const clearAuth = () => {
-  localStorage.removeItem('token');
-  localStorage.removeItem('user');
-  sessionStorage.removeItem('token');
-  sessionStorage.removeItem('user');
-};
+const parseProfileUser = (data) =>
+  data?.data?.user || data?.data || data?.user || null;
 
 // ─── Topbar ───────────────────────────────────────────────────────────────────
 const Topbar = () => {
-  const [user] = useState(getStoredUser);
+  const [user, setUser] = useState(getStoredUser);
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const refreshProfile = async () => {
+      try {
+        const data = await apiService.getProfile();
+        const profile = parseProfileUser(data);
+        if (cancelled || !profile) return;
+
+        setUser((prev) => {
+          const merged = updateStoredUser({ ...prev, ...profile });
+          return merged;
+        });
+      } catch {
+        // Keep stored user if profile fetch fails
+      }
+    };
+
+    refreshProfile();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -59,13 +68,11 @@ const Topbar = () => {
   }, []);
 
   const handleLogout = () => {
-    clearAuth();           // clear both localStorage & sessionStorage
+    clearTokens();
     setShowDropdown(false);
-    navigate('/login');    // go to login page
+    navigate('/login');
   };
 
-  // Exact field mapping from API response.data.user object:
-  // user.name, user.role, user.email, user.phone, user.department, user.createdAt
   const displayName = user?.name || user?.fullName || user?.username;
   const displayRole = user?.role || user?.userType;
   const displayEmail = user?.email || '';

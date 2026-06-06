@@ -1,24 +1,17 @@
 import React, { useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { LayoutDashboard, CreditCard, HelpCircle, LogOut, Tent, ClipboardCheck, ClipboardList } from "lucide-react";
+import { clearTokens, getStoredUserRole } from "../../utils/auth";
 
 const Sidebar = () => {
   const [isHovered, setIsHovered] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
-  const userRole = localStorage.getItem("userRole") || "Admin";
-
-  const clearAuth = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    sessionStorage.removeItem("token");
-    sessionStorage.removeItem("user");
-    localStorage.removeItem("userRole");
-  };
+  const userRole = getStoredUserRole() || "Admin";
 
   const handleLogout = () => {
-    clearAuth();
+    clearTokens();
     navigate("/login");
   };
 

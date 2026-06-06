@@ -14,6 +14,12 @@ import {
   formatISOToDisplay,
   calculateSettlement,
 } from "./components/vitranUtils";
+import {
+  getStoredUser,
+  getStoredUserRole,
+  normalizeRole,
+  updateStoredUser,
+} from "../../../utils/auth";
 
 function isCardOnDate(card, dateISO) {
   if (!dateISO) return true;
@@ -123,20 +129,37 @@ const SettlementCard = () => {
   const [selfLoading, setSelfLoading] = useState(false);
 
   useEffect(() => {
-    const userRaw = localStorage.getItem("user") || sessionStorage.getItem("user");
-    if (userRaw) {
+    const applyUser = (u) => {
+      if (!u) return;
+      setCurrentUser({
+        name: u.name || "Employee",
+        email: u.email || "N/A",
+        id: u.employeeId || u._id || "EMP-1000",
+        _mongoId: u._id || "",
+        location: u.location || "Mangla Vihar",
+      });
+    };
+
+    applyUser(getStoredUser());
+    setUserRole(getStoredUserRole() || "Admin");
+
+    let cancelled = false;
+    const refreshProfile = async () => {
       try {
-        const u = JSON.parse(userRaw);
-        setCurrentUser({
-          name: u.name || "Employee",
-          email: u.email || "N/A",
-          id: u.employeeId || u._id || "EMP-1000",
-          _mongoId: u._id || "",
-          location: u.location || "Mangla Vihar",
-        });
-      } catch { /* ignore */ }
-    }
-    setUserRole(localStorage.getItem("userRole") || "Admin");
+        const data = await apiService.getProfile();
+        const profile = data?.data?.user || data?.data || data?.user;
+        if (cancelled || !profile) return;
+        applyUser(updateStoredUser(profile));
+        if (profile.role) setUserRole(normalizeRole(profile.role));
+      } catch {
+        // keep stored user
+      }
+    };
+
+    refreshProfile();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {

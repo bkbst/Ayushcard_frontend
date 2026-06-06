@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { CalendarDays, MapPin, CheckCircle2, Clock, ClipboardCheck, LogOut, Loader2, CalendarCheck2, Sun } from "lucide-react";
 import apiService from "../../../api/service";
+import { getStoredUser } from "../../../utils/auth";
 import { useAttendance } from "../../../context/AttendanceContext";
 import Pagination from "../../../components/ui/Pagination";
 import {
@@ -59,8 +60,7 @@ const EmployeeAttendance = () => {
     async (silent = false) => {
       try {
         if (!silent) setLoading(true);
-        const userRaw = localStorage.getItem("user") || sessionStorage.getItem("user");
-        const user = userRaw ? JSON.parse(userRaw) : null;
+        const user = getStoredUser();
         if (!user?._id) {
           if (!silent) setLoading(false);
           return;
@@ -90,8 +90,7 @@ const EmployeeAttendance = () => {
 
   const fetchAttendanceRangeStats = useCallback(async () => {
     try {
-      const userRaw = localStorage.getItem("user") || sessionStorage.getItem("user");
-      const user = userRaw ? JSON.parse(userRaw) : null;
+      const user = getStoredUser();
       if (!user?._id) {
         setStatsRecords([]);
         setStatsTotal(0);

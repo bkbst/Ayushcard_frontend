@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import apiService from "../api/service";
+import { getStoredUser, getStoredUserRole } from "../utils/auth";
 
 const AttendanceContext = createContext(null);
 
@@ -43,8 +44,7 @@ export function AttendanceProvider({ children }) {
   const checkTodayAttendance = useCallback(async () => {
     try {
       setChecking(true);
-      const userRaw = localStorage.getItem("user") || sessionStorage.getItem("user");
-      const user = userRaw ? JSON.parse(userRaw) : null;
+      const user = getStoredUser();
       if (!user?._id) {
         setChecking(false);
         return;
@@ -82,7 +82,7 @@ export function AttendanceProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    const userRole = localStorage.getItem("userRole") || sessionStorage.getItem("userRole");
+    const userRole = getStoredUserRole();
     if (userRole !== "Employee" && userRole !== "Editor") {
       setChecking(false);
       return;

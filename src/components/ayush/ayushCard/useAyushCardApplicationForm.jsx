@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import HeadDuplicateHint from "./components/HeadDuplicateHint.jsx";
 import { useToast } from "../../ui/Toast";
 import apiService from "../../../api/service";
+import { getStoredUserRole } from "../../../utils/auth";
 import {
   AADHAAR_OCR_LOW_CONFIDENCE_MSG,
   isValidAadhaarName,
@@ -2187,7 +2188,7 @@ export function useAyushCardApplicationForm({
           date: new Date().toISOString(),
           orderId: orderId || "",
         },
-        campId: (localStorage.getItem("userRole") || sessionStorage.getItem("userRole")) === "Employee" ? (todayCampId || "") : "",
+        campId: getStoredUserRole() === "Employee" ? (todayCampId || "") : "",
       };
 
       const apiRes = await apiService.submitCardApplication(payload);
@@ -2322,7 +2323,7 @@ export function useAyushCardApplicationForm({
         customerPhone: familyHead.contactNumber.trim(),
         date: new Date().toISOString(),
       },
-      campId: (localStorage.getItem("userRole") || sessionStorage.getItem("userRole")) === "Employee" ? (todayCampId || "") : "",
+      campId: getStoredUserRole() === "Employee" ? (todayCampId || "") : "",
     };
   };
 

@@ -199,7 +199,7 @@ const AyushVitran = () => {
 
   const TABS = useMemo(() => [
     { id: "receipts", label: "Receipts", Icon: FileText },
-    { id: "exported", label: "Penalty Receipts", Icon: CreditCard },
+    { id: "exported", label: "Penalty", Icon: CreditCard },
     { id: "duplicates", label: "Duplicate Receipts", Icon: Receipt },
   ], []);
 
