@@ -8,12 +8,16 @@ import {
   fetchPublicCardByVerifyId,
   getCardDisplayId,
 } from "../../utils/cardVerify";
-import { isPublicCardVerified } from "../../utils/healthCardUtils";
+import { isPublicCardVerified, getDisplayStatus } from "../../utils/healthCardUtils";
+
+const apiBase = import.meta.env.DEV
+  ? ""
+  : (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || "");
 
 const publicApi = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "",
+  baseURL: apiBase,
   headers: { "Content-Type": "application/json" },
-  timeout: 10000,
+  timeout: 15000,
 });
 
 const Row = ({ label, value }) => (
@@ -95,6 +99,7 @@ export default function CardVerify() {
 
   const name = [card.firstName, card.middleName, card.lastName].filter(Boolean).join(" ");
   const isVerified = isPublicCardVerified(card);
+  const statusLabel = getDisplayStatus(card);
   const cardNo = getCardDisplayId(card);
   const ngoLocation = card.ngoLocation || "Mangla Vihar Kanpur - 208015";
   const ngoPhone = card.ngoPhone || "8303902030";
@@ -121,10 +126,17 @@ export default function CardVerify() {
             <XCircle size={22} className="text-red-500 shrink-0" />
           )}
           <h1 className="text-base sm:text-xl font-bold text-gray-900 leading-snug">
-            {isVerified ? "This Ayush Card is Verified" : "This Ayush Card is NOT Verified"}
+            {isVerified
+              ? "This Ayush Card is Verified"
+              : statusLabel === "Not verified"
+                ? "Ayush Card Application Received — Pending Verification"
+                : "This Ayush Card is NOT Verified"}
           </h1>
         </div>
         <p className="text-xs sm:text-sm text-gray-600">Card ID: {cardNo}</p>
+        <p className={`text-xs sm:text-sm font-semibold mt-1 ${isVerified ? "text-green-700" : "text-amber-700"}`}>
+          Status: {statusLabel}
+        </p>
       </div>
 
       {/* Front card */}
