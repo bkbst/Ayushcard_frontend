@@ -14,8 +14,13 @@ export function getCardDisplayId(card = {}) {
   return getCardVerifyId(card) || "—";
 }
 
+/** Route param for /verify/:id — mongo _id is authoritative for getCardById lookup. */
+export function getCardRouteId(card = {}) {
+  return String(card._id || card.id || getCardVerifyId(card) || "").trim();
+}
+
 export function buildCardVerifyUrl(card = {}) {
-  const id = getCardVerifyId(card);
+  const id = getCardRouteId(card);
   if (!id) return "";
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   return `${origin}/verify/${encodeURIComponent(id)}`;
@@ -96,10 +101,14 @@ export async function fetchPublicCardByVerifyId(apiClient, verifyId) {
     }
   };
 
-  // Dedicated lookups — backend already resolved the param
-  const directCard =
-    (await tryDirect(`/api/cards/card/${encodeURIComponent(param)}`)) ||
-    (await tryDirect(`/api/cards/${encodeURIComponent(param)}`));
+  // Dedicated lookups — backend already resolved the param.
+  // When the param is a mongo ObjectId, fetch by id (getCardById) first.
+  const isObjectId = /^[a-f0-9]{24}$/i.test(param);
+  const directCard = isObjectId
+    ? (await tryDirect(`/api/cards/${encodeURIComponent(param)}`)) ||
+      (await tryDirect(`/api/cards/card/${encodeURIComponent(param)}`))
+    : (await tryDirect(`/api/cards/card/${encodeURIComponent(param)}`)) ||
+      (await tryDirect(`/api/cards/${encodeURIComponent(param)}`));
 
   if (directCard) return directCard;
 
