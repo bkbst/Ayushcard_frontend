@@ -20,7 +20,7 @@ export function getCardRouteId(card = {}) {
 }
 
 export function buildCardVerifyUrl(card = {}) {
-  const id = getCardRouteId(card);
+  const id = getCardVerifyId(card);
   if (!id) return "";
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   return `${origin}/verify/${encodeURIComponent(id)}`;
