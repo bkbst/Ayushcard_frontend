@@ -28,35 +28,6 @@ export function isVerifiedStatus(status) {
   return s === "approved" || s === "active" || s === "verified";
 }
 
-/** Valid on public QR verify page — includes printed/exported cards. */
-export function isPublicCardVerified(card) {
-  if (!card) return false;
-  const s = getRawStatus(card);
-  if (isVerifiedStatus(s) || s === "exported") return true;
-  if (isPrintedCard(card)) return true;
-  if (card.verificationDate || card.verifiedAt || card.isVerified === true) return true;
-  return false;
-}
-
-/** Which section this card belongs in */
-export function getStatusBucket(card) {
-  if (isPrintedCard(card)) return "exported";
-  if (isVerifiedStatus(getRawStatus(card))) return "verified";
-  return "applications";
-}
-
-export function isApplicationCard(card) {
-  return getStatusBucket(card) === "applications";
-}
-
-export function isVerifiedCard(card) {
-  return getStatusBucket(card) === "verified";
-}
-
-export function isExportedCard(card) {
-  return getStatusBucket(card) === "exported";
-}
-
 export function getDisplayStatus(card) {
   if (isPrintedCard(card)) return "Exported";
 
@@ -76,6 +47,60 @@ export function getDisplayStatus(card) {
     default:
       return card?.status ? String(card.status) : "Not verified";
   }
+}
+
+/** Headline + colours for public /verify page — always matches getDisplayStatus. */
+export function getPublicVerifyPresentation(card) {
+  const statusLabel = getDisplayStatus(card);
+  const isPositive = statusLabel === "Verified" || statusLabel === "Exported";
+
+  let title;
+  switch (statusLabel) {
+    case "Verified":
+      title = "This Ayush Card is Verified";
+      break;
+    case "Exported":
+      title = "This Ayush Card is Verified & Issued";
+      break;
+    case "Not verified":
+      title = "Ayush Card Application Received — Pending Verification";
+      break;
+    case "Rejected":
+      title = "This Ayush Card Application was Rejected";
+      break;
+    case "Expired":
+      title = "This Ayush Card has Expired";
+      break;
+    default:
+      title = "This Ayush Card is NOT Verified";
+  }
+
+  return { statusLabel, title, isPositive };
+}
+
+/** @deprecated Use getPublicVerifyPresentation — kept for compatibility */
+export function isPublicCardVerified(card) {
+  const { isPositive } = getPublicVerifyPresentation(card);
+  return isPositive;
+}
+
+/** Which section this card belongs in */
+export function getStatusBucket(card) {
+  if (isPrintedCard(card)) return "exported";
+  if (isVerifiedStatus(getRawStatus(card))) return "verified";
+  return "applications";
+}
+
+export function isApplicationCard(card) {
+  return getStatusBucket(card) === "applications";
+}
+
+export function isVerifiedCard(card) {
+  return getStatusBucket(card) === "verified";
+}
+
+export function isExportedCard(card) {
+  return getStatusBucket(card) === "exported";
 }
 
 /** Raw created timestamp from API (ISO string or parseable date). */

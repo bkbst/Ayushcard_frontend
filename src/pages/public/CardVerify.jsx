@@ -9,7 +9,7 @@ import {
   getCardDisplayId,
   isValidCardRecord,
 } from "../../utils/cardVerify";
-import { isPublicCardVerified, getDisplayStatus } from "../../utils/healthCardUtils";
+import { getPublicVerifyPresentation } from "../../utils/healthCardUtils";
 
 const publicApi = axios.create({
   baseURL: import.meta.env.DEV ? "" : (import.meta.env.VITE_API_BASE_URL || ""),
@@ -97,8 +97,7 @@ export default function CardVerify() {
     );
   }
 
-  const isVerified = isPublicCardVerified(previewData);
-  const statusLabel = getDisplayStatus(previewData);
+  const { statusLabel, title: bannerTitle, isPositive } = getPublicVerifyPresentation(previewData);
   const cardNo = getCardDisplayId(previewData);
 
   return (
@@ -109,29 +108,38 @@ export default function CardVerify() {
       {/* Verification status */}
       <div
         className={`w-full max-w-[620px] rounded-2xl px-4 py-4 sm:px-6 sm:py-5 mb-4 sm:mb-6 text-center shadow-sm ${
-          isVerified
+          isPositive
             ? "bg-green-50 border border-green-200"
-            : "bg-amber-50 border border-amber-200"
+            : statusLabel === "Rejected" || statusLabel === "Expired"
+              ? "bg-red-50 border border-red-200"
+              : "bg-amber-50 border border-amber-200"
         }`}
       >
         <div className="flex items-center justify-center gap-2 mb-1">
-          {isVerified ? (
+          {isPositive ? (
             <CheckCircle size={22} className="text-green-600 shrink-0" />
           ) : (
-            <XCircle size={22} className="text-amber-600 shrink-0" />
+            <XCircle
+              size={22}
+              className={`shrink-0 ${
+                statusLabel === "Rejected" || statusLabel === "Expired"
+                  ? "text-red-500"
+                  : "text-amber-600"
+              }`}
+            />
           )}
           <h1 className="text-base sm:text-xl font-bold text-gray-900 leading-snug">
-            {isVerified
-              ? "This Ayush Card is Verified"
-              : statusLabel === "Not verified"
-                ? "Ayush Card Application Received"
-                : "This Ayush Card is NOT Verified"}
+            {bannerTitle}
           </h1>
         </div>
         <p className="text-xs sm:text-sm text-gray-600">Card ID: {cardNo}</p>
         <p
           className={`text-xs sm:text-sm font-semibold mt-1 ${
-            isVerified ? "text-green-700" : "text-amber-700"
+            isPositive
+              ? "text-green-700"
+              : statusLabel === "Rejected" || statusLabel === "Expired"
+                ? "text-red-700"
+                : "text-amber-700"
           }`}
         >
           Status: {statusLabel}
