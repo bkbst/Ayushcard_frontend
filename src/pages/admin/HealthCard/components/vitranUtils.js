@@ -75,6 +75,12 @@ export const toDupCardShape = (card, createdByMap = {}) => {
 
   return {
     id: card.id || card.applicationId || card._id || "",
+    _id: card._id || "",
+    distributed: Boolean(card.distributed),
+    distributedImage: card.distributedImage || "",
+    distributionDate: card.distributionDate || "",
+    distributedBy: card.distributedBy || null,
+    hasDuplicateReceipt: Boolean(card.hasDuplicateReceipt),
     clientName: card.applicant || "",
     mobile: card.phone || "",
     mukhiyaName: card.applicant || "",

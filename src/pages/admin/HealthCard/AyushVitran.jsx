@@ -10,7 +10,9 @@ import Pagination from "../../../components/ui/Pagination";
 import {
   normalizeHealthCard,
   parseHealthCardsResponse,
+  formatCardCreatedAt,
 } from "../../../utils/healthCardUtils";
+import { getFileOriginForRelativePaths } from "../../../config/apiBase";
 
 // Import modular components
 import StatTile from "./components/StatTile";
@@ -23,11 +25,18 @@ import {
   toDupCardShape,
 } from "./components/vitranUtils";
 
-const VITRAN_STORAGE_KEY = "ayush_vitran_records";
+// Resolve a stored relative upload path (e.g. /uploads/..) to a displayable URL
+const resolveUploadUrl = (path) => {
+  if (!path) return "";
+  if (path.startsWith("data:") || path.startsWith("http")) return path;
+  const origin = getFileOriginForRelativePaths();
+  if (!origin) return path;
+  return `${origin}${path.startsWith("/") ? "" : "/"}${path}`;
+};
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 const AyushVitran = () => {
-  const { toastSuccess } = useToast();
+  const { toastSuccess, toastError } = useToast();
   const [activeTab, setActiveTab] = useState("receipts");
 
   // Exported Cards tab state — fetched from API
@@ -46,13 +55,21 @@ const AyushVitran = () => {
   // Map of employeeId -> name for display
   const [createdByMap, setCreatedByMap] = useState({});
 
-  // Vitran (distribution) records
-  const [vitranRecords, setVitranRecords] = useState([]);
+  // Global distributed count (across all printed cards)
+  const [distributedTotal, setDistributedTotal] = useState(0);
 
-  // Duplicate receipts state
+  // Duplicate receipts state (server-side pagination + search)
   const [dupReceipts, setDupReceipts] = useState([]);
+  const [dupLoading, setDupLoading] = useState(false);
   const [dupFilterStatus, setDupFilterStatus] = useState("");
   const [dupFilterMethod, setDupFilterMethod] = useState("");
+  const [dupSearch, setDupSearch] = useState("");
+  const [debouncedDupSearch, setDebouncedDupSearch] = useState("");
+  const [dupPage, setDupPage] = useState(1);
+  const [dupItemsPerPage, setDupItemsPerPage] = useState(25);
+  const [dupTotalItems, setDupTotalItems] = useState(0);
+  const [dupTotalPages, setDupTotalPages] = useState(1);
+  const [dupCounts, setDupCounts] = useState({ total: 0, paid: 0, pending: 0 });
   const [viewingReceipt, setViewingReceipt] = useState(null);
 
   // Debounce card search input to reset page and trigger server-side fetch
@@ -63,6 +80,20 @@ const AyushVitran = () => {
     }, 300);
     return () => clearTimeout(handler);
   }, [cardSearch]);
+
+  // Debounce duplicate-receipt search
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedDupSearch(dupSearch.trim());
+      setDupPage(1);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [dupSearch]);
+
+  // Reset duplicate page when filters change
+  useEffect(() => {
+    setDupPage(1);
+  }, [dupFilterStatus, dupFilterMethod]);
 
   // Fetch exported (printed) cards from API
   const fetchExportedCards = useCallback(async () => {
@@ -107,61 +138,127 @@ const AyushVitran = () => {
     }
   }, [activeTab, exportedPage, exportedItemsPerPage, debouncedCardSearch, fetchExportedCards]);
 
-  // Load vitran records from localStorage
-  useEffect(() => {
+  // Global distributed count (across all printed cards)
+  const fetchDistributedTotal = useCallback(async () => {
     try {
-      const stored = JSON.parse(localStorage.getItem(VITRAN_STORAGE_KEY) || "[]");
-      setVitranRecords(stored);
-    } catch {
-      setVitranRecords([]);
+      const res = await apiService.getPrintedCards({ page: 1, limit: 1, distributed: true });
+      const { total } = parseHealthCardsResponse(res);
+      setDistributedTotal(Number(total) || 0);
+    } catch (err) {
+      console.warn("[AyushVitran] Failed to fetch distributed count:", err.message);
     }
   }, []);
 
-  // Load duplicate receipts from localStorage
   useEffect(() => {
+    if (activeTab === "receipts") fetchDistributedTotal();
+  }, [activeTab, fetchDistributedTotal]);
+
+  // Fetch a page of duplicate receipts from API (server-side pagination + search)
+  const fetchDupReceipts = useCallback(async () => {
+    setDupLoading(true);
     try {
-      const stored = JSON.parse(localStorage.getItem("ayush_dup_receipts") || "[]");
-      setDupReceipts(stored);
-    } catch {
+      const params = { page: dupPage, limit: dupItemsPerPage };
+      if (debouncedDupSearch) params.search = debouncedDupSearch;
+      if (dupFilterStatus) params.paymentStatus = dupFilterStatus;
+      if (dupFilterMethod) params.paymentMethod = dupFilterMethod;
+
+      const res = await apiService.getDuplicateReceipts(params);
+      const body = res?.data || {};
+      const items = body.items || (Array.isArray(body) ? body : []);
+      const pg = body.pagination || {};
+      const total = Number(pg.total ?? items.length);
+
+      const mapped = (Array.isArray(items) ? items : []).map((d) => ({
+        receiptNo: d.receiptNo,
+        cardId: d.cardId,
+        originalReceiptNo: d.originalReceiptNo,
+        clientName: d.clientName,
+        mobile: d.mobile,
+        employeeId: d.employeeId,
+        employeeName: d.employeeName,
+        penaltyAmount: d.penaltyAmount,
+        paymentMethod: d.paymentMethod,
+        paymentRef: d.paymentRef || "",
+        paymentStatus: d.paymentStatus,
+        paymentProofImage: resolveUploadUrl(d.paymentProofImage),
+        issuedAt: formatCardCreatedAt(d.issuedDate),
+        issuedDateTime: formatCardCreatedAt(d.issuedDate),
+        card: {
+          id: d.cardId,
+          clientName: d.clientName,
+          mobile: d.mobile,
+          employeeId: d.employeeId,
+          employeeName: d.employeeName,
+          area: "Mangla Vihar",
+          district: "Kanpur Nagar",
+          pincode: "208015",
+          totalMember: 1,
+        },
+      }));
+      setDupReceipts(mapped);
+      setDupTotalItems(total);
+      setDupTotalPages(Number(pg.pages ?? Math.ceil(total / dupItemsPerPage)) || 1);
+    } catch (err) {
+      console.warn("[AyushVitran] Failed to fetch duplicate receipts:", err.message);
       setDupReceipts([]);
+      setDupTotalItems(0);
+      setDupTotalPages(1);
+    } finally {
+      setDupLoading(false);
+    }
+  }, [dupPage, dupItemsPerPage, debouncedDupSearch, dupFilterStatus, dupFilterMethod]);
+
+  useEffect(() => {
+    fetchDupReceipts();
+  }, [fetchDupReceipts]);
+
+  // Fetch aggregate duplicate-receipt counts for stat tiles
+  const fetchDupCounts = useCallback(async () => {
+    try {
+      const [allRes, paidRes, pendingRes] = await Promise.all([
+        apiService.getDuplicateReceipts({ page: 1, limit: 1 }),
+        apiService.getDuplicateReceipts({ page: 1, limit: 1, paymentStatus: "paid" }),
+        apiService.getDuplicateReceipts({ page: 1, limit: 1, paymentStatus: "pending" }),
+      ]);
+      const totalOf = (r) => Number(r?.data?.pagination?.total ?? 0);
+      setDupCounts({
+        total: totalOf(allRes),
+        paid: totalOf(paidRes),
+        pending: totalOf(pendingRes),
+      });
+    } catch (err) {
+      console.warn("[AyushVitran] Failed to fetch duplicate counts:", err.message);
     }
   }, []);
 
-  // Save duplicate receipts to localStorage
-  const saveDupReceipt = useCallback((record) => {
-    setDupReceipts(prev => {
-      const updated = [record, ...prev];
-      try { localStorage.setItem("ayush_dup_receipts", JSON.stringify(updated)); } catch { }
-      return updated;
-    });
-  }, []);
+  useEffect(() => {
+    fetchDupCounts();
+  }, [fetchDupCounts]);
 
-  // Delete duplicate receipt from localStorage
-  const deleteDupReceipt = useCallback((receiptNo) => {
-    setDupReceipts(prev => {
-      const updated = prev.filter(r => r.receiptNo !== receiptNo);
-      try { localStorage.setItem("ayush_dup_receipts", JSON.stringify(updated)); } catch { }
-      return updated;
-    });
-    toastSuccess("Duplicate receipt deleted successfully");
-  }, [toastSuccess]);
+  // Delete duplicate receipt via API
+  const deleteDupReceipt = useCallback(async (receiptNo) => {
+    try {
+      await apiService.deleteDuplicateReceipt(receiptNo);
+      toastSuccess("Duplicate receipt deleted successfully");
+      fetchDupReceipts();
+      fetchDupCounts();
+    } catch (err) {
+      toastError(err?.response?.data?.message || "Failed to delete duplicate receipt");
+    }
+  }, [toastSuccess, toastError, fetchDupReceipts, fetchDupCounts]);
 
-  const saveVitranRecord = useCallback((record) => {
-    setVitranRecords((prev) => {
-      const filtered = prev.filter((r) => r.cardId !== record.cardId);
-      const updated = [record, ...filtered];
-      try { localStorage.setItem(VITRAN_STORAGE_KEY, JSON.stringify(updated)); } catch { /* ignore */ }
-      return updated;
-    });
-  }, []);
+  // Build a view record for a distributed card
+  const buildVitranView = useCallback((card) => ({
+    cardId: card.id,
+    clientName: card.clientName,
+    mobile: card.mobile,
+    recipientImage: resolveUploadUrl(card.distributedImage),
+    distributedAt: card.distributionDate ? formatCardCreatedAt(card.distributionDate) : "—",
+    distributedDateTime: card.distributionDate ? formatCardCreatedAt(card.distributionDate) : "—",
+    card: card._rawCard,
+  }), []);
 
-  const vitranMap = useMemo(() => {
-    const map = {};
-    vitranRecords.forEach((r) => { map[r.cardId] = r; });
-    return map;
-  }, [vitranRecords]);
-
-  const distributedCount = vitranRecords.length;
+  const distributedCount = distributedTotal;
   const pendingVitranCount = Math.max(0, (exportedTotalItems || exportedCards.length) - distributedCount);
 
   // Map exported cards to the dup-receipt shape for display & modal
@@ -185,17 +282,12 @@ const AyushVitran = () => {
     });
   }, [mappedExportedCards, cardSearch, cardFilterEmployee]);
 
-  const filteredDups = useMemo(() => {
-    return dupReceipts.filter(r => {
-      const matchStatus = !dupFilterStatus || r.paymentStatus === dupFilterStatus;
-      const matchMethod = !dupFilterMethod || r.paymentMethod === dupFilterMethod;
-      return matchStatus && matchMethod;
-    });
-  }, [dupReceipts, dupFilterStatus, dupFilterMethod]);
+  // Server-side filtered/paginated list — render directly
+  const filteredDups = dupReceipts;
 
-  // Stats
-  const paidCount = dupReceipts.filter(r => r.paymentStatus === "paid").length;
-  const pendingCount = dupReceipts.filter(r => r.paymentStatus === "pending").length;
+  // Stats (aggregate counts from server)
+  const paidCount = dupCounts.paid;
+  const pendingCount = dupCounts.pending;
 
   const TABS = useMemo(() => [
     { id: "receipts", label: "Receipts", Icon: FileText },
@@ -232,7 +324,7 @@ const AyushVitran = () => {
             <StatTile icon={CreditCard} label="Total Cards" value={exportedTotalItems || exportedCards.length} color="bg-blue-100 text-blue-600" bg="bg-blue-50 border-blue-100" />
             <StatTile icon={PackageCheck} label="Distributed" value={distributedCount} color="bg-green-100 text-green-600" bg="bg-green-50 border-green-100" />
             <StatTile icon={Clock} label="Pending Vitran" value={pendingVitranCount} color="bg-amber-100 text-amber-600" bg="bg-amber-50 border-amber-100" />
-            <StatTile icon={Receipt} label="Dup. Receipts" value={dupReceipts.length} color="bg-orange-100 text-[#F68E5F]" bg="bg-orange-50 border-orange-100" />
+            <StatTile icon={Receipt} label="Dup. Receipts" value={dupCounts.total} color="bg-orange-100 text-[#F68E5F]" bg="bg-orange-50 border-orange-100" />
           </div>
 
           <div className="flex flex-wrap items-center gap-3 mb-4 shrink-0">
@@ -276,8 +368,7 @@ const AyushVitran = () => {
                   </thead>
                   <tbody>
                     {filteredCards.map((card, i) => {
-                      const vitran = vitranMap[card.id];
-                      const isDistributed = Boolean(vitran);
+                      const isDistributed = Boolean(card.distributed);
                       return (
                         <tr key={card.id || i} className="border-b border-[#F3F4F6] hover:bg-[#F9FAFB] transition-colors">
                           <td className="py-3 px-4 text-sm text-[#22333B]">{i + 1}</td>
@@ -294,7 +385,7 @@ const AyushVitran = () => {
                           <td className="py-3 px-4 text-center">
                             <div className="flex items-center justify-center gap-1.5">
                               {isDistributed ? (
-                                <button onClick={() => setViewingVitran(vitran)}
+                                <button onClick={() => setViewingVitran(buildVitranView(card))}
                                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-green-50 text-green-600 border border-green-100 hover:bg-green-500 hover:text-white transition-all shadow-sm">
                                   <Eye size={11} /> View
                                 </button>
@@ -340,7 +431,7 @@ const AyushVitran = () => {
           {/* Stat tiles */}
           <div className="flex overflow-x-auto scrollbar-none flex-nowrap sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4 pb-1 shrink-0 w-full">
             <StatTile icon={CreditCard} label="Total Exported" value={exportedTotalItems || exportedCards.length} color="bg-blue-100 text-blue-600" bg="bg-blue-50 border-blue-100" />
-            <StatTile icon={Receipt} label="Dup. Receipts Issued" value={dupReceipts.length} color="bg-orange-100 text-[#F68E5F]" bg="bg-orange-50 border-orange-100" />
+            <StatTile icon={Receipt} label="Dup. Receipts Issued" value={dupCounts.total} color="bg-orange-100 text-[#F68E5F]" bg="bg-orange-50 border-orange-100" />
             <StatTile icon={Check} label="Payments Collected" value={`₹${paidCount * PENALTY_AMOUNT}`} color="bg-green-100 text-green-600" bg="bg-green-50 border-green-100" />
             <StatTile icon={Clock} label="Pending Payments" value={pendingCount} color="bg-amber-100 text-amber-600" bg="bg-amber-50 border-amber-100" />
           </div>
@@ -433,13 +524,19 @@ const AyushVitran = () => {
         <div className="flex flex-col flex-1 min-h-0 no-print">
           {/* Mini stats */}
           <div className="flex overflow-x-auto scrollbar-none flex-nowrap sm:grid sm:grid-cols-3 gap-3 mb-4 pb-1 shrink-0 w-full">
-            <StatTile icon={ClipboardList} label="Total Issued" value={dupReceipts.length} color="bg-purple-100 text-purple-600" bg="bg-purple-50 border-purple-100" />
+            <StatTile icon={ClipboardList} label="Total Issued" value={dupCounts.total} color="bg-purple-100 text-purple-600" bg="bg-purple-50 border-purple-100" />
             <StatTile icon={Check} label="Paid" value={paidCount} color="bg-green-100 text-green-600" bg="bg-green-50 border-green-100" />
             <StatTile icon={Clock} label="Pending" value={pendingCount} color="bg-amber-100 text-amber-600" bg="bg-amber-50 border-amber-100" />
           </div>
 
           {/* Filters */}
           <div className="flex flex-wrap items-center gap-2 mb-4 shrink-0">
+            <div className="relative w-full sm:flex-1 sm:min-w-[200px]">
+              <input type="text" placeholder="Search by receipt no., card ID, client, mobile, employee..."
+                value={dupSearch} onChange={e => setDupSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 text-xs border border-gray-200 rounded-xl placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#F68E5F] focus:border-[#F68E5F]" />
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            </div>
             <select value={dupFilterStatus} onChange={e => setDupFilterStatus(e.target.value)}
               className="flex-1 sm:flex-initial text-xs border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#F68E5F] text-gray-600 bg-white">
               <option value="">All Statuses</option>
@@ -452,8 +549,8 @@ const AyushVitran = () => {
               <option value="online">Online</option>
               <option value="offline">Offline (Cash)</option>
             </select>
-            {(dupFilterStatus || dupFilterMethod) && (
-              <button onClick={() => { setDupFilterStatus(""); setDupFilterMethod(""); }}
+            {(dupSearch || dupFilterStatus || dupFilterMethod) && (
+              <button onClick={() => { setDupSearch(""); setDupFilterStatus(""); setDupFilterMethod(""); }}
                 className="shrink-0 text-xs text-gray-400 hover:text-gray-600 px-2 py-2 border border-gray-200 rounded-xl bg-white flex items-center gap-1">
                 <X size={12} /> Clear
               </button>
@@ -462,11 +559,16 @@ const AyushVitran = () => {
 
           {/* Duplicate Receipts Table */}
           <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden flex flex-col flex-1 min-h-0 shadow-sm">
-            {filteredDups.length === 0 ? (
+            {dupLoading ? (
+              <div className="flex-1 flex flex-col items-center justify-center py-16 text-gray-400">
+                <Loader2 size={28} className="animate-spin text-[#F68E5F] mb-3" />
+                <p className="text-sm font-semibold">Loading duplicate receipts...</p>
+              </div>
+            ) : filteredDups.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center py-16 text-gray-400">
                 <Receipt size={32} className="text-gray-200 mb-3" />
-                <p className="text-sm font-bold text-gray-500">No duplicate receipts yet</p>
-                <p className="text-xs text-gray-400 mt-1">Go to "Penalty Receipts" tab and click "Duplicate" to issue one</p>
+                <p className="text-sm font-bold text-gray-500">{debouncedDupSearch || dupFilterStatus || dupFilterMethod ? "No matching duplicate receipts" : "No duplicate receipts yet"}</p>
+                <p className="text-xs text-gray-400 mt-1">{debouncedDupSearch || dupFilterStatus || dupFilterMethod ? "Try adjusting your search or filters" : 'Go to "Penalty Receipts" tab and click "Duplicate" to issue one'}</p>
               </div>
             ) : (
               <div className="overflow-y-auto overflow-x-auto flex-1">
@@ -532,6 +634,20 @@ const AyushVitran = () => {
               </div>
             )}
           </div>
+
+          {dupTotalPages > 1 && (
+            <div className="mt-3 shrink-0">
+              <Pagination
+                currentPage={dupPage}
+                totalPages={dupTotalPages}
+                onPageChange={setDupPage}
+                itemsPerPage={dupItemsPerPage}
+                onItemsPerPageChange={val => { setDupItemsPerPage(val); setDupPage(1); }}
+                totalItems={dupTotalItems}
+                pageSizeOptions={[25, 50, 100]}
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -540,9 +656,10 @@ const AyushVitran = () => {
         <VitranModal
           card={selectedCardForVitran}
           onClose={() => setSelectedCardForVitran(null)}
-          onDistributed={(record) => {
-            saveVitranRecord(record);
+          onDistributed={() => {
             setSelectedCardForVitran(null);
+            fetchExportedCards();
+            fetchDistributedTotal();
           }}
         />
       )}
@@ -556,9 +673,9 @@ const AyushVitran = () => {
         <DuplicateReceiptModal
           card={selectedCardForDup}
           onClose={() => setSelectedCardForDup(null)}
-          onIssued={(record) => {
-            saveDupReceipt(record);
-            setSelectedCardForDup(null);
+          onIssued={() => {
+            fetchDupReceipts();
+            fetchDupCounts();
           }}
         />
       )}

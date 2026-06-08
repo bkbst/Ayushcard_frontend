@@ -1,13 +1,15 @@
 import React, { useEffect, useRef, useState } from "react";
 import { X, Camera, Upload, Check, PackageCheck } from "lucide-react";
 import { useToast } from "../../../../components/ui/Toast";
+import apiService from "../../../../api/service";
 import AyushCardReceiptPreview from "./AyushCardReceiptPreview";
 import { getDateTime, getFormattedCurrentDate } from "./vitranUtils";
 import { fetchFullReceiptCard } from "./receiptLoader";
 
 const VitranModal = ({ card, onClose, onDistributed }) => {
-  const { toastWarn, toastSuccess } = useToast();
+  const { toastWarn, toastSuccess, toastError } = useToast();
   const [recipientImage, setRecipientImage] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
   const [receiptCard, setReceiptCard] = useState(card);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [cameraError, setCameraError] = useState("");
@@ -88,24 +90,39 @@ const VitranModal = ({ card, onClose, onDistributed }) => {
     reader.readAsDataURL(file);
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!recipientImage) {
       toastWarn("Please capture or upload the recipient's photo before confirming distribution.");
       return;
     }
-    const record = {
-      cardId: card.id,
-      clientName: receiptCard.clientName || card.clientName,
-      mobile: receiptCard.mobile || card.mobile,
-      employeeId: card.employeeId,
-      employeeName: card.employeeName,
-      card: receiptCard,
-      recipientImage,
-      distributedAt: getFormattedCurrentDate(),
-      distributedDateTime: getDateTime(),
-    };
-    onDistributed(record);
-    toastSuccess(`Card distributed to ${card.clientName}`);
+    const distributeId = card._id || card.id;
+    if (!distributeId) {
+      toastError("Card reference missing. Cannot distribute.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await apiService.distributeCard(distributeId, recipientImage);
+      const doc = res?.data || res;
+      const record = {
+        cardId: card.id,
+        clientName: receiptCard.clientName || card.clientName,
+        mobile: receiptCard.mobile || card.mobile,
+        employeeId: card.employeeId,
+        employeeName: card.employeeName,
+        card: receiptCard,
+        recipientImage,
+        distributedAt: getFormattedCurrentDate(),
+        distributedDateTime: getDateTime(),
+      };
+      onDistributed(record, doc);
+      toastSuccess(`Card distributed to ${card.clientName}`);
+    } catch (err) {
+      const msg = err?.response?.data?.message || "Failed to distribute card";
+      toastError(msg);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -183,11 +200,11 @@ const VitranModal = ({ card, onClose, onDistributed }) => {
         </div>
 
         <div className="px-5 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl flex flex-col sm:flex-row items-center gap-2 shrink-0">
-          <button onClick={onClose} className="w-full sm:w-auto px-4 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 bg-white">
+          <button onClick={onClose} disabled={submitting} className="w-full sm:w-auto px-4 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 bg-white disabled:opacity-50">
             Cancel
           </button>
-          <button onClick={handleConfirm} className="flex-1 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#F68E5F] text-white text-xs font-black rounded-lg hover:bg-[#ff7637]">
-            <Check size={14} /> Confirm Card Distributed
+          <button onClick={handleConfirm} disabled={submitting} className="flex-1 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#F68E5F] text-white text-xs font-black rounded-lg hover:bg-[#ff7637] disabled:opacity-60">
+            <Check size={14} /> {submitting ? "Distributing..." : "Confirm Card Distributed"}
           </button>
         </div>
       </div>

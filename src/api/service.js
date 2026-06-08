@@ -505,6 +505,31 @@ const apiService = {
         });
     },
 
+    // PATCH /api/cards/:id/distribute  (recipient photo as base64 in JSON body)
+    distributeCard: async (id, imageBase64) => {
+        const response = await api.patch(`/api/cards/${id}/distribute`, { image: imageBase64 });
+        return response.data;
+    },
+
+    // ─── DUPLICATE RECEIPTS ───────────────────────────────────────────────
+
+    // GET /api/duplicate-receipts
+    getDuplicateReceipts: async (params = {}) => {
+        return dedupedGetJson('api', api, '/api/duplicate-receipts', { params });
+    },
+
+    // POST /api/duplicate-receipts  (payment proof as base64 in JSON body)
+    createDuplicateReceipt: async (payload) => {
+        const response = await api.post('/api/duplicate-receipts', payload);
+        return response.data;
+    },
+
+    // DELETE /api/duplicate-receipts/:receiptNo
+    deleteDuplicateReceipt: async (receiptNo) => {
+        const response = await api.delete(`/api/duplicate-receipts/${encodeURIComponent(receiptNo)}`);
+        return response.data;
+    },
+
     // ─── CARD MEMBERS ─────────────────────────────────────────────────────
 
     // GET /api/card-members/card/:cardId

@@ -4,9 +4,9 @@ import {
 } from "lucide-react";
 import { LOGO_BASE64 } from "../../../../utils/logoBase64";
 import { useToast } from "../../../../components/ui/Toast";
+import apiService from "../../../../api/service";
 import {
   PENALTY_AMOUNT,
-  generateDupReceiptNo,
   getFormattedCurrentDate,
   getDateTime
 } from "./vitranUtils";
@@ -20,6 +20,7 @@ const DuplicateReceiptModal = ({ card, onClose, onIssued }) => {
   const [paymentStatus, setPaymentStatus] = useState("paid");
   const [generatedRecord, setGeneratedRecord] = useState(null);
   const [isPrinted, setIsPrinted] = useState(false);
+  const [generating, setGenerating] = useState(false);
 
   // Offline payment proof image state
   const [offlineImage, setOfflineImage] = useState(null);
@@ -106,7 +107,7 @@ const DuplicateReceiptModal = ({ card, onClose, onIssued }) => {
     reader.readAsDataURL(file);
   };
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (paymentMethod === "online" && !paymentRef.trim()) {
       toastWarn("Please enter a payment reference for online payment.");
       return;
@@ -115,25 +116,45 @@ const DuplicateReceiptModal = ({ card, onClose, onIssued }) => {
       toastWarn("Please upload or capture a payment receipt photo for offline payment.");
       return;
     }
-    const record = {
-      receiptNo: generateDupReceiptNo(),
-      cardId: card.id,
-      originalReceiptNo: card.receiptNo,
-      clientName: card.clientName,
-      mobile: card.mobile,
-      employeeId: card.employeeId,
-      employeeName: card.employeeName,
-      penaltyAmount: PENALTY_AMOUNT,
-      paymentMethod,
-      paymentRef: paymentRef.trim(),
-      paymentStatus,
-      issuedAt: getFormattedCurrentDate(),
-      issuedDateTime: getDateTime(),
-      card,
-      offlineImage, // Save offline payment image proof
-    };
-    setGeneratedRecord(record);
-    setStep(3);
+    setGenerating(true);
+    try {
+      const res = await apiService.createDuplicateReceipt({
+        cardId: card.id,
+        penaltyAmount: PENALTY_AMOUNT,
+        paymentMethod,
+        paymentRef: paymentRef.trim(),
+        paymentStatus,
+        ...(paymentMethod === "offline" && offlineImage
+          ? { paymentProofImage: offlineImage }
+          : {}),
+      });
+      const doc = res?.data || res;
+      const record = {
+        receiptNo: doc.receiptNo,
+        cardId: doc.cardId || card.id,
+        originalReceiptNo: doc.originalReceiptNo || card.receiptNo,
+        clientName: doc.clientName || card.clientName,
+        mobile: doc.mobile || card.mobile,
+        employeeId: doc.employeeId || card.employeeId,
+        employeeName: doc.employeeName || card.employeeName,
+        penaltyAmount: doc.penaltyAmount ?? PENALTY_AMOUNT,
+        paymentMethod: doc.paymentMethod || paymentMethod,
+        paymentRef: doc.paymentRef || paymentRef.trim(),
+        paymentStatus: doc.paymentStatus || paymentStatus,
+        issuedAt: getFormattedCurrentDate(),
+        issuedDateTime: getDateTime(),
+        card,
+        offlineImage,
+      };
+      setGeneratedRecord(record);
+      onIssued(record);
+      setStep(3);
+    } catch (err) {
+      const msg = err?.response?.data?.message || "Failed to issue duplicate receipt";
+      toastError(msg);
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const handlePrint = () => {
@@ -285,7 +306,6 @@ const DuplicateReceiptModal = ({ card, onClose, onIssued }) => {
   };
 
   const handleSaveAndClose = () => {
-    if (generatedRecord) onIssued(generatedRecord);
     onClose();
   };
 
@@ -504,8 +524,8 @@ const DuplicateReceiptModal = ({ card, onClose, onIssued }) => {
               <button onClick={() => setStep(1)} className="flex items-center gap-1 py-2 px-3 border border-gray-200 rounded-xl text-xs font-bold text-gray-600 bg-white hover:bg-gray-50 transition-colors whitespace-nowrap">
                 <ChevronLeft size={13} /> Back
               </button>
-              <button onClick={handleGenerate} className="flex-1 py-2 bg-[#F68E5F] text-white rounded-xl text-xs font-black hover:bg-[#ff7637] transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap">
-                Generate Receipt <ChevronRight size={13} />
+              <button onClick={handleGenerate} disabled={generating} className="flex-1 py-2 bg-[#F68E5F] text-white rounded-xl text-xs font-black hover:bg-[#ff7637] transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap disabled:opacity-60">
+                {generating ? "Issuing..." : <>Generate Receipt <ChevronRight size={13} /></>}
               </button>
             </>
           )}
