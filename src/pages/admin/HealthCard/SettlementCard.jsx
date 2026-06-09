@@ -74,6 +74,56 @@ async function fetchDailyCardCounts(dateISO) {
   return map;
 }
 
+/** Per-day settlement records keyed by employeeCode / employee _id. */
+async function fetchSettlementMap(dateISO) {
+  const map = {};
+  try {
+    let page = 1;
+    let totalPages = 1;
+
+    do {
+      const res = await apiService.getEmployeeSettlements({
+        date: dateISO,
+        page,
+        limit: 100,
+      });
+      const envelope = res?.data && typeof res.data === "object" ? res.data : res;
+      const list = Array.isArray(envelope?.settlements) ? envelope.settlements : [];
+      const pagination = envelope?.pagination || {};
+      totalPages = Number(pagination.pages ?? 1);
+
+      list.forEach((s) => {
+        const entry = {
+          settlementEmployeeId: s.employeeId,
+          dayCards: Number(s.dayCards) || 0,
+          amount: Number(s.amount) || 0,
+          status: s.status === "done" ? "done" : "pending",
+        };
+        if (s.employeeCode) map[String(s.employeeCode).toLowerCase()] = entry;
+        if (s.employeeId) map[String(s.employeeId).toLowerCase()] = entry;
+      });
+      page += 1;
+    } while (page <= totalPages);
+  } catch (err) {
+    console.warn("[SettlementCard] Failed to load settlement map:", err);
+  }
+  return map;
+}
+
+const SettlementStatusBadge = ({ status }) => {
+  const isDone = status === "done";
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
+        isDone ? "bg-[#76DB1E33] text-[#76DB1E]" : "bg-[#FFA10033] text-[#FFA100]"
+      }`}
+    >
+      <span className={`w-1.5 h-1.5 rounded-full ${isDone ? "bg-[#76DB1E]" : "bg-[#FFA100]"}`} />
+      {isDone ? "Done" : "Pending"}
+    </span>
+  );
+};
+
 async function fetchEmployeeDailyCount(employeeMongoId, dateISO) {
   if (!employeeMongoId || String(employeeMongoId).startsWith("EMP-")) return 0;
   try {
@@ -195,9 +245,10 @@ const SettlementCard = () => {
   const fetchEmployeesList = useCallback(async () => {
     setLoading(true);
     try {
-      const [res, performanceMap] = await Promise.all([
+      const [res, performanceMap, settlementMap] = await Promise.all([
         apiService.getEmployees({ page: currentPage, limit: itemsPerPage }),
         fetchDailyCardCounts(selectedDate),
+        fetchSettlementMap(selectedDate),
       ]);
 
       const rawData = res.data || res;
@@ -211,7 +262,9 @@ const SettlementCard = () => {
         const empId = u.employeeId ? u.employeeId.toString().toLowerCase() : "";
         const userName = u.name ? u.name.toString().toLowerCase() : "";
         const userEmail = u.email ? u.email.toString().toLowerCase() : "";
-        const totalCards = performanceMap[rawId]
+        const settlement = settlementMap[empId] || settlementMap[rawId] || null;
+        const totalCards = settlement?.dayCards
+          ?? performanceMap[rawId]
           ?? performanceMap[empId]
           ?? performanceMap[userName]
           ?? performanceMap[userEmail]
@@ -225,6 +278,9 @@ const SettlementCard = () => {
           location: u.location || "Mangla Vihar",
           totalCards,
           pincode: u.pincode || "208015",
+          status: settlement?.status || "pending",
+          settlementAmount: settlement?.amount || 0,
+          _settlementEmployeeId: settlement?.settlementEmployeeId || null,
           _rawId: u._id,
         };
       });
@@ -428,6 +484,39 @@ const SettlementCard = () => {
     setSelectedEmployee(null);
   };
 
+  const [savingSettle, setSavingSettle] = useState(false);
+
+  const handleSettle = async (employee, nextStatus) => {
+    if (!employee?._settlementEmployeeId) {
+      toastError("No settlement record for this employee.");
+      return;
+    }
+    setSavingSettle(true);
+    try {
+      const calc = calculateSettlement(employee.totalCards);
+      await apiService.settleEmployeeDay({
+        employeeId: employee._settlementEmployeeId,
+        date: selectedDate,
+        amount: calc.grandTotal,
+        status: nextStatus,
+      });
+      setSelectedEmployee((prev) =>
+        prev ? { ...prev, status: nextStatus, settlementAmount: calc.grandTotal } : prev,
+      );
+      toastSuccess(
+        nextStatus === "done"
+          ? `Settlement marked done for ${employee.name}.`
+          : `Settlement reverted to pending for ${employee.name}.`,
+      );
+      fetchEmployeesList();
+    } catch (err) {
+      console.error("Settle employee failed:", err);
+      toastError(err?.response?.data?.message || "Failed to update settlement.");
+    } finally {
+      setSavingSettle(false);
+    }
+  };
+
   const datePicker = (
     <ThemedDatePicker
       value={selectedDate}
@@ -540,6 +629,7 @@ const SettlementCard = () => {
                       <th className="py-3 px-4">Email</th>
                       <th className="py-3 px-4 text-center">Date</th>
                       <th className="py-3 px-4 text-center">Day Cards</th>
+                      <th className="py-3 px-4 text-center">Status</th>
                       <th className="py-3 px-5 text-center">Action</th>
                     </tr>
                   </thead>
@@ -563,6 +653,9 @@ const SettlementCard = () => {
                           </span>
                         </td>
                         <td className="py-3 px-4 text-center text-sm font-normal text-[#22333B] whitespace-nowrap">{row.totalCards}</td>
+                        <td className="py-3 px-4 text-center whitespace-nowrap">
+                          <SettlementStatusBadge status={row.status} />
+                        </td>
                         <td className="py-3 px-5 text-center">
                           <button
                             onClick={() => setSelectedEmployee(row)}
@@ -612,17 +705,40 @@ const SettlementCard = () => {
             <div className="flex-1 overflow-y-auto bg-gray-100/50 p-6 flex items-start justify-center">
               <SettlementSlipPreview employee={selectedEmployee} date={selectedEmployee.date || selectedDateDisplay} />
             </div>
-            <div className="px-5 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl flex flex-col sm:flex-row items-center gap-2 shrink-0 w-full">
-              <button onClick={() => setSelectedEmployee(null)} className="w-full sm:w-auto px-4 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 bg-white hover:bg-gray-50 transition-colors text-center whitespace-nowrap">
-                Close
+            <div className="px-5 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl flex flex-col gap-2.5 shrink-0 w-full">
+              <div className="flex items-center justify-between w-full">
+                <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Settlement Status</span>
+                <SettlementStatusBadge status={selectedEmployee.status} />
+              </div>
+              <button
+                onClick={() =>
+                  handleSettle(selectedEmployee, selectedEmployee.status === "done" ? "pending" : "done")
+                }
+                disabled={savingSettle || !selectedEmployee._settlementEmployeeId}
+                className={`w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-black rounded-lg transition-all shadow-sm whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed ${
+                  selectedEmployee.status === "done"
+                    ? "bg-white border border-[#F68E5F] text-[#F68E5F] hover:bg-orange-50"
+                    : "bg-[#76DB1E] text-white hover:bg-[#69c41a]"
+                }`}
+              >
+                {savingSettle
+                  ? "Saving..."
+                  : selectedEmployee.status === "done"
+                    ? "Mark as Pending"
+                    : "Mark as Settled"}
               </button>
-              <div className="flex flex-1 gap-2 w-full">
-                <button onClick={() => handlePrintSlip(selectedEmployee)} className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-[#22333B] text-white text-xs font-black rounded-lg hover:bg-[#1a2830] transition-all shadow-sm whitespace-nowrap">
-                  <Printer size={14} /> Print
+              <div className="flex flex-col sm:flex-row items-center gap-2 w-full">
+                <button onClick={() => setSelectedEmployee(null)} className="w-full sm:w-auto px-4 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 bg-white hover:bg-gray-50 transition-colors text-center whitespace-nowrap">
+                  Close
                 </button>
-                <button onClick={() => handleRawBtPrintSlip(selectedEmployee)} className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-[#F68E5F] text-white text-xs font-black rounded-lg hover:bg-[#ff7637] transition-all shadow-sm whitespace-nowrap">
-                  RawBT Print
-                </button>
+                <div className="flex flex-1 gap-2 w-full">
+                  <button onClick={() => handlePrintSlip(selectedEmployee)} className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-[#22333B] text-white text-xs font-black rounded-lg hover:bg-[#1a2830] transition-all shadow-sm whitespace-nowrap">
+                    <Printer size={14} /> Print
+                  </button>
+                  <button onClick={() => handleRawBtPrintSlip(selectedEmployee)} className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-[#F68E5F] text-white text-xs font-black rounded-lg hover:bg-[#ff7637] transition-all shadow-sm whitespace-nowrap">
+                    RawBT Print
+                  </button>
+                </div>
               </div>
             </div>
           </div>

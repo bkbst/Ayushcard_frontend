@@ -609,6 +609,19 @@ const apiService = {
         return response.data;
     },
 
+    // ─── EMPLOYEE SETTLEMENTS ─────────────────────────────────────────────
+
+    // GET /api/employees/settlements?date=YYYY-MM-DD&page=&limit=
+    getEmployeeSettlements: async (params = {}) => {
+        return dedupedGetJson('api', api, '/api/employees/settlements', { params });
+    },
+
+    // POST /api/employees/settlements  { employeeId, date, amount, status }
+    settleEmployeeDay: async (payload) => {
+        const response = await api.post('/api/employees/settlements', payload);
+        return response.data;
+    },
+
     // ─── PUBLIC CARD APPLICATION (home page) ──────────────────────────────
 
     // POST /api/cards/card-users  (no auth required — public endpoint)
