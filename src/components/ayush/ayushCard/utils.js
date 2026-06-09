@@ -65,3 +65,25 @@ export function thermalMemberDocId(m) {
 
 export const generateApplicationId = () =>
   `AC-${Math.floor(1000000 + Math.random() * 9000000)}`;
+
+/** Keep payment from submit payload when create/get API omits it on the card record */
+export function mergeReceiptWithPayment(created, paymentPayload) {
+  if (!created || typeof created !== "object") return created;
+  if (!paymentPayload || typeof paymentPayload !== "object") return created;
+
+  const fromApi = created.payment && typeof created.payment === "object" ? created.payment : {};
+  return {
+    ...created,
+    payment: {
+      ...paymentPayload,
+      ...fromApi,
+      method: fromApi.method || paymentPayload.method,
+      transactionId:
+        fromApi.transactionId ||
+        fromApi.txnId ||
+        paymentPayload.transactionId ||
+        paymentPayload.txnId,
+      orderId: fromApi.orderId || paymentPayload.orderId,
+    },
+  };
+}

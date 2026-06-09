@@ -49,7 +49,9 @@ import {
   splitFamilyHeadNameParts,
   extractCreatedCardRecord,
   generateApplicationId,
+  mergeReceiptWithPayment,
 } from "./utils.js";
+import { getPaymentDisplay } from "../../../pages/admin/HealthCard/components/receiptLoader.js";
 import {
   runRegistrationDuplicateChecks,
   hasBlockingDuplicateFromState,
@@ -93,7 +95,25 @@ export function useAyushCardApplicationForm({
       const record =
         envelope?.data && typeof envelope.data === "object" ? envelope.data : envelope;
       if (record && (record.applicationId || record._id || record.contact)) {
-        return { ...created, ...record };
+        const createdPay =
+          created.payment && typeof created.payment === "object" ? created.payment : {};
+        const recordPay =
+          record.payment && typeof record.payment === "object" ? record.payment : {};
+        return {
+          ...created,
+          ...record,
+          payment: {
+            ...createdPay,
+            ...recordPay,
+            method: recordPay.method || createdPay.method,
+            transactionId:
+              recordPay.transactionId ||
+              recordPay.txnId ||
+              createdPay.transactionId ||
+              createdPay.txnId,
+            orderId: recordPay.orderId || createdPay.orderId,
+          },
+        };
       }
       return created;
     } catch {
@@ -2192,7 +2212,10 @@ export function useAyushCardApplicationForm({
       };
 
       const apiRes = await apiService.submitCardApplication(payload);
-      const created = extractCreatedCardRecord(apiRes);
+      const created = mergeReceiptWithPayment(
+        extractCreatedCardRecord(apiRes),
+        payload.payment,
+      );
       submissionCompletedRef.current = true;
       setSubmissionReceipt(await ensureReceiptHasCreatedBy(created));
       if (created?.applicationId) {
@@ -2373,7 +2396,10 @@ export function useAyushCardApplicationForm({
       } else {
         apiRes = await apiService.createHealthCard(payload);
       }
-      const created = extractCreatedCardRecord(apiRes);
+      const created = mergeReceiptWithPayment(
+        extractCreatedCardRecord(apiRes),
+        payload.payment,
+      );
       submissionCompletedRef.current = true;
       setSubmissionReceipt(await ensureReceiptHasCreatedBy(created));
       if (created?.applicationId) {
@@ -2756,19 +2782,20 @@ export function useAyushCardApplicationForm({
     <HeadDuplicateHint check={check} kind={kind} />
   );
 
-  const thermalPaymentLabel = staffPaymentFlow
-    ? staffPaymentMode === "cash"
-      ? "Cash / offline"
-      : txnId
-        ? "Online (verified)"
-        : "Online"
-    : "UPI / Online";
-
-  const thermalPaymentRef = staffPaymentFlow
-    ? staffPaymentMode === "cash"
-      ? "Receipt on file"
-      : txnId || "—"
-    : txnId || "—";
+  const { label: thermalPaymentLabel, ref: thermalPaymentRef } = getPaymentDisplay({
+    ...submissionReceipt,
+    payment: submissionReceipt?.payment ?? {
+      method: staffPaymentFlow
+        ? staffPaymentMode === "cash"
+          ? "cash"
+          : "online"
+        : "online",
+      transactionId: txnId,
+      orderId: orderId || "",
+    },
+    txnId: txnId || submissionReceipt?.payment?.transactionId,
+    orderId: orderId || submissionReceipt?.payment?.orderId,
+  });
 
   const hasPrintableReceipt = Boolean(
     submissionReceipt &&

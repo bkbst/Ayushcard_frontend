@@ -22,12 +22,53 @@ export function formatReceiptAddress(rec) {
 }
 
 export function getPaymentDisplay(rec) {
-  const method = String(rec?.payment?.method || rec?.paymentMethod || "").toLowerCase();
-  const txn = rec?.payment?.transactionId || rec?.payment?.txnId || rec?.txnId || "";
-  const isOnline = method.includes("online") || method.includes("upi") || Boolean(txn && method !== "cash");
+  if (!rec) return { label: "Cash / offline", ref: "Receipt on file" };
+
+  const pay = rec.payment && typeof rec.payment === "object" ? rec.payment : {};
+  const method = String(
+    pay.method ?? rec.paymentMethod ?? rec.paymentMode ?? "",
+  ).toLowerCase();
+
+  const txn = String(
+    pay.transactionId ??
+    pay.txnId ??
+    rec.transactionId ??
+    rec.txnId ??
+    "",
+  ).trim();
+
+  const docs = Array.isArray(rec.documents) ? rec.documents : [];
+  const hasCashReceiptDoc = docs.some((d) =>
+    String(d?.name || "").toLowerCase().includes("cashpayment"),
+  );
+  const hasOnlineOrder = Boolean(pay.orderId || rec.orderId);
+  const txnIsCashMarker = /^CASH-/i.test(txn);
+
+  const isExplicitCash =
+    method === "cash" ||
+    method === "offline" ||
+    hasCashReceiptDoc ||
+    txnIsCashMarker;
+
+  const isOnline =
+    !isExplicitCash &&
+    (method === "online" ||
+      method.includes("upi") ||
+      method.includes("cashfree") ||
+      method.includes("netbank") ||
+      hasOnlineOrder ||
+      Boolean(txn));
+
+  if (isOnline) {
+    return {
+      label: txn ? "Online" : "UPI / Online",
+      ref: txn || pay.orderId || rec.orderId || "—",
+    };
+  }
+
   return {
-    label: isOnline ? (txn ? "Online (verified)" : "UPI / Online") : "Cash / offline",
-    ref: txn || "Receipt on file",
+    label: "Cash / offline",
+    ref: txnIsCashMarker && txn ? txn : "Receipt on file",
   };
 }
 
@@ -68,6 +109,24 @@ export async function fetchFullReceiptCard(card) {
     const clientName = [raw.firstName, raw.middleName, raw.lastName].filter(Boolean).join(" ")
       || card.clientName;
 
+    const apiPay = raw.payment && typeof raw.payment === "object" ? raw.payment : {};
+    const cachedPay =
+      (card?._rawCard?.payment && typeof card._rawCard.payment === "object"
+        ? card._rawCard.payment
+        : null) ||
+      (card?.payment && typeof card.payment === "object" ? card.payment : {});
+    const payment = {
+      ...cachedPay,
+      ...apiPay,
+      method: apiPay.method || cachedPay.method,
+      transactionId:
+        apiPay.transactionId ||
+        apiPay.txnId ||
+        cachedPay.transactionId ||
+        cachedPay.txnId,
+      orderId: apiPay.orderId || cachedPay.orderId,
+    };
+
     return {
       ...card,
       clientName,
@@ -81,7 +140,8 @@ export async function fetchFullReceiptCard(card) {
         ?? card.amount
         ?? 0,
       ),
-      _rawCard: { ...raw, members },
+      payment,
+      _rawCard: { ...raw, members, payment, documents: raw.documents || card?._rawCard?.documents },
     };
   } catch (err) {
     console.warn("[fetchFullReceiptCard] failed:", err);
