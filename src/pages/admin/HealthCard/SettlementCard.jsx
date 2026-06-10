@@ -7,15 +7,17 @@ import { useToast } from "../../../components/ui/Toast";
 import Pagination from "../../../components/ui/Pagination";
 import ThemedDatePicker from "../../../components/ui/ThemedDatePicker";
 import { LOGO_BASE64 } from "../../../utils/logoBase64";
-import { parseHealthCardsResponse, resolveCreatedById } from "../../../utils/healthCardUtils";
 import SettlementSlipPreview from "./components/SettlementSlipPreview";
 import {
   getTodayISO,
   formatISOToDisplay,
 } from "./components/vitranUtils";
 import {
-  calculateSettlementFromCards,
-  EMPTY_SETTLEMENT,
+  buildSettlementAmountTableHtml,
+  formatGrandTotalLabel,
+  normalizeSettlementRecord,
+  SETTLEMENT_AMOUNT_TABLE_CSS,
+  settlementDisplayFromApi,
 } from "./components/settlementCalc";
 import {
   getStoredUser,
@@ -24,57 +26,77 @@ import {
   updateStoredUser,
 } from "../../../utils/auth";
 
-function isCardOnDate(card, dateISO) {
-  if (!dateISO) return true;
-  const raw = card?.createdAt ?? card?.created_at ?? card?.applicationDate;
-  if (!raw) return false;
-  const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) return false;
-  const [y, m, day] = dateISO.split("-").map(Number);
-  return d.getFullYear() === y && d.getMonth() + 1 === m && d.getDate() === day;
-}
+function unwrapSettlementsResponse(res) {
+  if (!res) return { list: [], pagination: {} };
 
-function addCardToDailyMap(map, card, dateISO) {
-  if (!isCardOnDate(card, dateISO)) return;
-  const cb = card?.createdBy;
-  const keys = new Set();
+  const blocks = [res, res.data, res.data?.data, res.result, res.payload].filter(
+    (b) => b && typeof b === "object",
+  );
 
-  if (cb && typeof cb === "object") {
-    const mongoId = resolveCreatedById(cb);
-    if (mongoId) keys.add(String(mongoId).toLowerCase());
-    if (cb.employeeId) keys.add(String(cb.employeeId).toLowerCase());
-    if (cb._id) keys.add(String(cb._id).toLowerCase());
-    if (cb.email) keys.add(String(cb.email).toLowerCase());
-    if (cb.name) keys.add(String(cb.name).toLowerCase());
-  } else if (cb) {
-    keys.add(String(cb).toLowerCase());
+  for (const block of blocks) {
+    if (Array.isArray(block.settlements)) {
+      return { list: block.settlements, pagination: block.pagination || {} };
+    }
+    if (Array.isArray(block)) {
+      return { list: block, pagination: {} };
+    }
+    if (block.employeeId && (block.employeeCode || block.dayCards != null)) {
+      return { list: [block], pagination: {} };
+    }
   }
 
-  keys.forEach((key) => {
-    map[key] = (map[key] || 0) + 1;
-  });
+  return { list: [], pagination: {} };
 }
 
-/** Count cards created on a specific day, grouped by employee (createdBy). */
-async function fetchDailyCardCounts(dateISO) {
-  const map = {};
-  let page = 1;
-  let totalPages = 1;
+function settlementMatchesEmployee(settlement, employee) {
+  if (!settlement || !employee) return false;
+  const empMongo = String(
+    employee._rawId || employee._mongoId || employee._settlementEmployeeId || "",
+  ).toLowerCase();
+  const empCode = String(employee.id || "").toLowerCase();
+  const sId = String(settlement.employeeId || "").toLowerCase();
+  const sCode = String(settlement.employeeCode || "").toLowerCase();
+  return (empMongo && sId === empMongo) || (empCode && (sCode === empCode || sId === empCode));
+}
 
-  do {
-    const res = await apiService.getHealthCards({
-      createdAt: dateISO,
-      page,
-      limit: 100,
-      sort: "-createdAt",
-    });
-    const { raw, pages } = parseHealthCardsResponse(res);
-    totalPages = Number(pages || 1);
-    raw.forEach((card) => addCardToDailyMap(map, card, dateISO));
-    page += 1;
-  } while (page <= totalPages);
+function resolveSettlementRecord(employee) {
+  if (!employee) return null;
+  const embedded = employee._settlementRecord;
+  if (embedded?.employeeId || embedded?.employeeCode || embedded?.dayCards != null) {
+    return normalizeSettlementRecord(embedded);
+  }
+  return null;
+}
 
-  return map;
+/** Fetch one employee's settlement row for a date from GET /api/employees/settlements. */
+async function fetchEmployeeSettlement(employee, dateISO) {
+  if (!employee || !dateISO) return null;
+
+  const embedded = resolveSettlementRecord(employee);
+  if (embedded) return embedded;
+
+  try {
+    let page = 1;
+    let totalPages = 1;
+
+    do {
+      const res = await apiService.getEmployeeSettlements({
+        date: dateISO,
+        page,
+        limit: 100,
+      });
+      const { list, pagination } = unwrapSettlementsResponse(res);
+      totalPages = Number(pagination.pages ?? 1);
+
+      const match = list.find((s) => settlementMatchesEmployee(s, employee));
+      if (match) return normalizeSettlementRecord(match);
+
+      page += 1;
+    } while (page <= totalPages);
+  } catch (err) {
+    console.warn("[SettlementCard] Failed to load employee settlement:", err);
+  }
+  return null;
 }
 
 /** Per-day settlement records keyed by employeeCode / employee _id. */
@@ -90,20 +112,16 @@ async function fetchSettlementMap(dateISO) {
         page,
         limit: 100,
       });
-      const envelope = res?.data && typeof res.data === "object" ? res.data : res;
-      const list = Array.isArray(envelope?.settlements) ? envelope.settlements : [];
-      const pagination = envelope?.pagination || {};
+      const { list, pagination } = unwrapSettlementsResponse(res);
       totalPages = Number(pagination.pages ?? 1);
 
       list.forEach((s) => {
-        const entry = {
-          settlementEmployeeId: s.employeeId,
-          dayCards: Number(s.dayCards) || 0,
-          amount: Number(s.amount) || 0,
-          status: s.status === "done" ? "done" : "pending",
-        };
+        const entry = normalizeSettlementRecord(s);
+        if (!entry) return;
         if (s.employeeCode) map[String(s.employeeCode).toLowerCase()] = entry;
         if (s.employeeId) map[String(s.employeeId).toLowerCase()] = entry;
+        if (s.email) map[String(s.email).toLowerCase()] = entry;
+        if (s.name) map[String(s.name).toLowerCase()] = entry;
       });
       page += 1;
     } while (page <= totalPages);
@@ -127,86 +145,6 @@ const SettlementStatusBadge = ({ status }) => {
   );
 };
 
-async function fetchEmployeeDailyCards(employeeMongoId, dateISO) {
-  if (!employeeMongoId || String(employeeMongoId).startsWith("EMP-")) return [];
-  const cards = [];
-  let page = 1;
-  let totalPages = 1;
-
-  do {
-    const res = await apiService.getHealthCardsByEmployee(employeeMongoId, {
-      createdAt: dateISO,
-      page,
-      limit: 100,
-    });
-    const envelope = res?.data && typeof res.data === "object" ? res.data : res;
-    const raw = Array.isArray(envelope?.cards)
-      ? envelope.cards
-      : Array.isArray(res?.data?.cards)
-        ? res.data.cards
-        : [];
-    const pagination = envelope?.pagination || res?.data?.pagination || {};
-    totalPages = Number(pagination.pages ?? 1);
-    cards.push(...raw.filter((c) => isCardOnDate(c, dateISO)));
-    page += 1;
-  } while (page <= totalPages);
-
-  return cards;
-}
-
-async function fetchPenaltiesForEmployee(employee, dateISO) {
-  try {
-    const res = await apiService.getDuplicateReceipts({ page: 1, limit: 500 });
-    const body = res?.data || {};
-    const items = Array.isArray(body.items) ? body.items : Array.isArray(body) ? body : [];
-    const empKeys = new Set(
-      [employee?.id, employee?._rawId, employee?._mongoId]
-        .filter(Boolean)
-        .map((v) => String(v).toLowerCase()),
-    );
-
-    return items.filter((p) => {
-      const rawDate = p.issuedDate ?? p.createdAt ?? p.issuedAt;
-      if (!isCardOnDate({ createdAt: rawDate }, dateISO)) return false;
-      const pid = String(p.employeeId ?? "").toLowerCase();
-      return empKeys.has(pid);
-    });
-  } catch {
-    return [];
-  }
-}
-
-async function fetchEmployeeDailyCount(employeeMongoId, dateISO) {
-  if (!employeeMongoId || String(employeeMongoId).startsWith("EMP-")) return 0;
-  try {
-    let page = 1;
-    let totalPages = 1;
-    let count = 0;
-
-    do {
-      const res = await apiService.getHealthCardsByEmployee(employeeMongoId, {
-        createdAt: dateISO,
-        page,
-        limit: 100,
-      });
-      const envelope = res?.data && typeof res.data === "object" ? res.data : res;
-      const raw = Array.isArray(envelope?.cards)
-        ? envelope.cards
-        : Array.isArray(res?.data?.cards)
-          ? res.data.cards
-          : [];
-      const pagination = envelope?.pagination || res?.data?.pagination || {};
-      totalPages = Number(pagination.pages ?? 1);
-      count += raw.filter((c) => isCardOnDate(c, dateISO)).length;
-      page += 1;
-    } while (page <= totalPages);
-
-    return count;
-  } catch {
-    return 0;
-  }
-}
-
 const SettlementCard = () => {
   const { toastSuccess, toastError, toastWarn } = useToast();
 
@@ -229,7 +167,7 @@ const SettlementCard = () => {
   const [employeeLocation, setEmployeeLocation] = useState("Mangla Vihar");
   const [employeePincode, setEmployeePincode] = useState("208015");
   const [selfLoading, setSelfLoading] = useState(false);
-  const [settlementCalc, setSettlementCalc] = useState(EMPTY_SETTLEMENT);
+  const [settlementCalc, setSettlementCalc] = useState(null);
   const [calcLoading, setCalcLoading] = useState(false);
 
   useEffect(() => {
@@ -280,11 +218,15 @@ const SettlementCard = () => {
           setEmployeePincode(u.pincode || "208015");
         }
 
-        const count = await fetchEmployeeDailyCount(
-          u?._id || currentUser._mongoId || mongoId,
+        const settlement = await fetchEmployeeSettlement(
+          {
+            id: currentUser.id,
+            _rawId: u?._id || currentUser._mongoId || mongoId,
+            _settlementEmployeeId: u?._id || currentUser._mongoId,
+          },
           selectedDate,
         );
-        setEmployeeCardCount(count);
+        setEmployeeCardCount(settlement?.dayCards ?? 0);
       } catch (err) {
         console.warn("Failed to fetch self daily settlement:", err);
         setEmployeeCardCount(0);
@@ -299,9 +241,8 @@ const SettlementCard = () => {
   const fetchEmployeesList = useCallback(async () => {
     setLoading(true);
     try {
-      const [res, performanceMap, settlementMap] = await Promise.all([
+      const [res, settlementMap] = await Promise.all([
         apiService.getEmployees({ page: currentPage, limit: itemsPerPage }),
-        fetchDailyCardCounts(selectedDate),
         fetchSettlementMap(selectedDate),
       ]);
 
@@ -316,13 +257,13 @@ const SettlementCard = () => {
         const empId = u.employeeId ? u.employeeId.toString().toLowerCase() : "";
         const userName = u.name ? u.name.toString().toLowerCase() : "";
         const userEmail = u.email ? u.email.toString().toLowerCase() : "";
-        const settlement = settlementMap[empId] || settlementMap[rawId] || null;
-        const totalCards = settlement?.dayCards
-          ?? performanceMap[rawId]
-          ?? performanceMap[empId]
-          ?? performanceMap[userName]
-          ?? performanceMap[userEmail]
-          ?? 0;
+        const settlement =
+          settlementMap[empId] ||
+          settlementMap[rawId] ||
+          settlementMap[userEmail] ||
+          settlementMap[userName] ||
+          null;
+        const totalCards = settlement?.dayCards ?? 0;
 
         return {
           id: u.employeeId || u._id || `EMP-${2000 + i}`,
@@ -333,9 +274,10 @@ const SettlementCard = () => {
           totalCards,
           pincode: u.pincode || "208015",
           status: settlement?.status || "pending",
-          settlementAmount: settlement?.amount || 0,
-          _settlementEmployeeId: settlement?.settlementEmployeeId || null,
-          _rawId: u._id,
+          settlementAmount: settlement?.totalCollected || settlement?.amount || 0,
+          _settlementEmployeeId: settlement?.employeeId || u._id || null,
+          _settlementRecord: settlement,
+          _rawId: u._id ? String(u._id) : "",
         };
       });
 
@@ -352,33 +294,52 @@ const SettlementCard = () => {
     }
   }, [currentPage, itemsPerPage, selectedDate, selectedDateDisplay]);
 
-  const loadSettlementForEmployee = useCallback(async (employee) => {
+  const loadSettlementForEmployee = useCallback(async (employee, options = {}) => {
     if (!employee) {
-      setSettlementCalc(EMPTY_SETTLEMENT);
-      return EMPTY_SETTLEMENT;
+      setSettlementCalc(null);
+      return null;
     }
-    setCalcLoading(true);
+
+    const { silent = false } = options;
+    if (!silent) setCalcLoading(true);
+
     try {
-      const mongoId = employee._rawId || employee._mongoId || employee.id;
-      const [cards, penalties] = await Promise.all([
-        fetchEmployeeDailyCards(mongoId, selectedDate),
-        fetchPenaltiesForEmployee(employee, selectedDate),
-      ]);
-      const calc = calculateSettlementFromCards(cards, penalties);
-      setSettlementCalc(calc);
-      return calc;
+      const settlement = await fetchEmployeeSettlement(employee, selectedDate);
+      const display = settlement ? settlementDisplayFromApi(settlement) : null;
+      setSettlementCalc(display);
+      return display;
     } catch (err) {
-      console.warn("[SettlementCard] settlement calc failed:", err);
-      setSettlementCalc(EMPTY_SETTLEMENT);
-      return EMPTY_SETTLEMENT;
+      console.warn("[SettlementCard] settlement load failed:", err);
+      setSettlementCalc(null);
+      return null;
     } finally {
-      setCalcLoading(false);
+      if (!silent) setCalcLoading(false);
     }
   }, [selectedDate]);
 
-  useEffect(() => {
-    if (selectedEmployee) loadSettlementForEmployee(selectedEmployee);
-  }, [selectedEmployee, loadSettlementForEmployee]);
+  const handleOpenSettlement = useCallback(
+    async (row) => {
+      setSelectedEmployee(row);
+      setCalcLoading(true);
+      try {
+        const settlement = await fetchEmployeeSettlement(row, selectedDate);
+        if (settlement) {
+          setSelectedEmployee({
+            ...row,
+            _settlementRecord: settlement,
+            totalCards: settlement.dayCards ?? row.totalCards,
+            status: settlement.status ?? row.status,
+            _settlementEmployeeId: settlement.employeeId ?? row._settlementEmployeeId,
+          });
+        }
+        setSettlementCalc(settlement ? settlementDisplayFromApi(settlement) : null);
+      } finally {
+        setCalcLoading(false);
+      }
+    },
+    [selectedDate],
+  );
+
 
   useEffect(() => {
     if (userRole !== "Employee") fetchEmployeesList();
@@ -386,8 +347,13 @@ const SettlementCard = () => {
 
   const handlePrintSlip = (employee, calc = settlementCalc) => {
     if (!employee) return;
-    const slipCalc = calc || EMPTY_SETTLEMENT;
-    const totalPenalty = slipCalc.penaltyAmount + slipCalc.onPenaltyAmount;
+    if (!calc) {
+      toastWarn("No settlement data to print.");
+      return;
+    }
+    const slipCalc = calc;
+    const amountTableHtml = buildSettlementAmountTableHtml(slipCalc, 2);
+    const grandTotalLabel = formatGrandTotalLabel(slipCalc);
     const dateStr = employee.date || selectedDateDisplay;
     const pw = window.open("", "_blank", "width=380,height=750,status=no,toolbar=no,menubar=no");
     if (!pw) { toastError("Pop-up blocked! Allow pop-ups for this site."); return; }
@@ -408,9 +374,7 @@ const SettlementCard = () => {
   .metadata-double{display:flex;justify-content:space-between;margin-top:3.5px}
   .dashed-border-top-bottom{border-top:1px dashed black;border-bottom:1px dashed black;padding:5px 0;margin:12px 0;text-align:center;font-size:11.5px;font-weight:bold;font-family:sans-serif}
   .dashed-divider{border-top:1px dashed black;margin:5px 0}
-  .table-heading{display:flex;justify-content:space-between;font-family:sans-serif;text-transform:uppercase;font-weight:bold;border-bottom:1px solid black;padding-bottom:3px;margin-bottom:6px;font-size:9.5px}
-  .table-row{display:flex;justify-content:space-between;margin-bottom:4px}
-  .table-total{display:flex;justify-content:space-between;font-weight:bold;border-top:1px solid black;padding-top:5px;margin-top:6px;font-size:10.5px}
+  ${SETTLEMENT_AMOUNT_TABLE_CSS}
   .grand-total-box{background:#f9f9f9;border:1px solid black;padding:6px;text-align:center;font-family:sans-serif;margin:15px 0}
   .grand-total-title{font-size:8.5px;color:#555;text-transform:uppercase;font-weight:bold;letter-spacing:0.5px}
   .grand-total-value{font-size:10px;font-weight:bold;margin-top:2px}
@@ -439,16 +403,10 @@ const SettlementCard = () => {
     <div style="margin-top:5px">Total Apply Ayush Card - ${slipCalc.totalCards ?? employee.totalCards}</div>
   </div>
   <div class="dashed-border-top-bottom uppercase">Apply Ayush Card</div>
-  <div class="table-heading"><span>Card Detail - Amount</span><span>Online - Amount</span></div>
-  <div class="table-row"><span>160 x ${slipCalc.off160} = ${Number(slipCalc.amt160).toFixed(2)}</span><span>${slipCalc.on160} = ${Number(slipCalc.onAmt160).toFixed(0)}</span></div>
-  <div class="table-row"><span>200 x ${slipCalc.off200} = ${Number(slipCalc.amt200).toFixed(2)}</span><span>${slipCalc.on200} = ${Number(slipCalc.onAmt200).toFixed(0)}</span></div>
-  <div class="table-row"><span>240 x ${slipCalc.off240} = ${Number(slipCalc.amt240).toFixed(2)}</span><span>${slipCalc.on240} = ${Number(slipCalc.onAmt240).toFixed(0)}</span></div>
-  <div class="table-row"><span>280 x ${slipCalc.off280} = ${Number(slipCalc.amt280).toFixed(2)}</span><span>${slipCalc.on280} = ${Number(slipCalc.onAmt280).toFixed(0)}</span></div>
-  <div class="table-row"><span>Penalty x ${slipCalc.penaltyCount} = ${Number(slipCalc.penaltyAmount).toFixed(2)}</span><span>${slipCalc.onPenaltyCount} = ${Number(slipCalc.onPenaltyAmount).toFixed(0)}</span></div>
-  <div class="table-total"><span>Total = ${slipCalc.offlineCount} = ${Number(slipCalc.offlineTotalWithPenalty).toFixed(2)}</span><span>${slipCalc.onlineCount} = ${Number(slipCalc.onlineTotalWithPenalty).toFixed(2)}</span></div>
+  ${amountTableHtml}
   <div class="grand-total-box">
     <div class="grand-total-title">Calculated Revenue Equation</div>
-    <div class="grand-total-value">Grand Total = ${slipCalc.offlineBaseTotal} + ${slipCalc.onlineBaseTotal} + ${totalPenalty} = <span class="grand-total-highlight">₹${slipCalc.grandTotal}</span></div>
+    <div class="grand-total-value">Grand Total = ${grandTotalLabel}</div>
   </div>
   <div class="signatures"><div>Cash Receiver Name : __________________</div><div>Cash Receiver ID No :- __________________</div></div>
   <div class="sig-box-container"><div class="sig-box"><span class="sig-text">Signature</span></div></div>
@@ -461,8 +419,13 @@ const SettlementCard = () => {
 
   const handleRawBtPrintSlip = (employee, calc = settlementCalc) => {
     if (!employee) return;
-    const slipCalc = calc || EMPTY_SETTLEMENT;
-    const totalPenalty = slipCalc.penaltyAmount + slipCalc.onPenaltyAmount;
+    if (!calc) {
+      toastWarn("No settlement data to print.");
+      return;
+    }
+    const slipCalc = calc;
+    const amountTableHtml = buildSettlementAmountTableHtml(slipCalc, 0);
+    const grandTotalLabel = formatGrandTotalLabel(slipCalc);
     const dateStr = employee.date || selectedDateDisplay;
     const htmlContent = `
 <!DOCTYPE html><html><head><meta charset="utf-8">
@@ -480,9 +443,9 @@ const SettlementCard = () => {
   .metadata-double { display: flex; justify-content: space-between; margin-top: 2px; }
   .dashed-border-top-bottom { border-top: 1px dashed black; border-bottom: 1px dashed black; padding: 4px 0; margin: 8px 0; text-align: center; font-size: 8.5px; font-weight: bold; font-family: sans-serif; }
   .dashed-divider { border-top: 1px dashed black; margin: 4px 0; }
-  .table-heading { display: flex; justify-content: space-between; font-family: sans-serif; text-transform: uppercase; font-weight: bold; border-bottom: 1px solid black; padding-bottom: 2px; margin-bottom: 4px; font-size: 7.5px; }
-  .table-row { display: flex; justify-content: space-between; margin-bottom: 3px; }
-  .table-total { display: flex; justify-content: space-between; font-weight: bold; border-top: 1px solid black; padding-top: 4px; margin-top: 4px; font-size: 8px; }
+  ${SETTLEMENT_AMOUNT_TABLE_CSS}
+  .amount-table thead th { font-size: 7.5px; }
+  .amount-table tfoot .amount-total td { font-size: 8px; }
   .grand-total-box { background: #f9f9f9; border: 1px solid black; padding: 4px; text-align: center; font-family: sans-serif; margin: 8px 0; }
   .grand-total-title { font-size: 6.5px; color: #555; text-transform: uppercase; font-weight: bold; }
   .grand-total-value { font-size: 7.5px; font-weight: bold; margin-top: 1px; }
@@ -511,16 +474,10 @@ const SettlementCard = () => {
     <div style="margin-top:3px">Total Apply Ayush Card - ${slipCalc.totalCards ?? employee.totalCards}</div>
   </div>
   <div class="dashed-border-top-bottom uppercase">Apply Ayush Card</div>
-  <div class="table-heading"><span>Card Detail - Amount</span><span>Online - Amount</span></div>
-  <div class="table-row"><span>160 x ${slipCalc.off160} = ${Number(slipCalc.amt160).toFixed(0)}</span><span>${slipCalc.on160} = ${Number(slipCalc.onAmt160).toFixed(0)}</span></div>
-  <div class="table-row"><span>200 x ${slipCalc.off200} = ${Number(slipCalc.amt200).toFixed(0)}</span><span>${slipCalc.on200} = ${Number(slipCalc.onAmt200).toFixed(0)}</span></div>
-  <div class="table-row"><span>240 x ${slipCalc.off240} = ${Number(slipCalc.amt240).toFixed(0)}</span><span>${slipCalc.on240} = ${Number(slipCalc.onAmt240).toFixed(0)}</span></div>
-  <div class="table-row"><span>280 x ${slipCalc.off280} = ${Number(slipCalc.amt280).toFixed(0)}</span><span>${slipCalc.on280} = ${Number(slipCalc.onAmt280).toFixed(0)}</span></div>
-  <div class="table-row"><span>Penalty x ${slipCalc.penaltyCount} = ${Number(slipCalc.penaltyAmount).toFixed(0)}</span><span>${slipCalc.onPenaltyCount} = ${Number(slipCalc.onPenaltyAmount).toFixed(0)}</span></div>
-  <div class="table-total"><span>Total = ${slipCalc.offlineCount} = ${Number(slipCalc.offlineTotalWithPenalty).toFixed(0)}</span><span>${slipCalc.onlineCount} = ${Number(slipCalc.onlineTotalWithPenalty).toFixed(0)}</span></div>
+  ${amountTableHtml}
   <div class="grand-total-box">
     <div class="grand-total-title">Calculated Revenue Equation</div>
-    <div class="grand-total-value">Grand Total = ${slipCalc.offlineBaseTotal} + ${slipCalc.onlineBaseTotal} + ${totalPenalty} = <span class="grand-total-highlight">₹${slipCalc.grandTotal}</span></div>
+    <div class="grand-total-value">Grand Total = ${grandTotalLabel}</div>
   </div>
   <div class="signatures"><div>Cash Receiver Name : __________________</div><div>Cash Receiver ID No :- __________________</div></div>
   <div class="sig-box-container"><div class="sig-box"><span class="sig-text">Signature</span></div></div>
@@ -583,15 +540,19 @@ const SettlementCard = () => {
     }
     setSavingSettle(true);
     try {
-      const calc = settlementCalc?.grandTotal != null ? settlementCalc : await loadSettlementForEmployee(employee);
+      const amount =
+        employee._settlementRecord?.totalCollected ??
+        settlementCalc?.grandTotal ??
+        employee.settlementAmount ??
+        0;
       await apiService.settleEmployeeDay({
         employeeId: employee._settlementEmployeeId,
         date: selectedDate,
-        amount: calc.grandTotal,
+        amount,
         status: nextStatus,
       });
       setSelectedEmployee((prev) =>
-        prev ? { ...prev, status: nextStatus, settlementAmount: calc.grandTotal } : prev,
+        prev ? { ...prev, status: nextStatus, settlementAmount: amount } : prev,
       );
       toastSuccess(
         nextStatus === "done"
@@ -659,7 +620,7 @@ const SettlementCard = () => {
             </div>
             <h3 className="text-base font-black text-[#22333B]">{selfEmployee.name}</h3>
             <p className="text-xs text-gray-400 mt-0.5">{selfEmployee.id} · {selfEmployee.email}</p>
-            <p className="text-[11px] text-[#F68E5F] font-bold mt-1">{selectedDateDisplay} · {settlementCalc.totalCards ?? employeeCardCount} cards</p>
+            <p className="text-[11px] text-[#F68E5F] font-bold mt-1">{selectedDateDisplay} · {settlementCalc?.totalCards ?? employeeCardCount} cards</p>
             <div className="w-full border-t border-gray-100 my-5" />
             <SettlementSlipPreview employee={selfEmployee} date={selectedDateDisplay} calc={settlementCalc} />
             <div className="w-full border-t border-gray-100 my-5" />
@@ -748,7 +709,7 @@ const SettlementCard = () => {
                         </td>
                         <td className="py-3 px-5 text-center">
                           <button
-                            onClick={() => setSelectedEmployee(row)}
+                            onClick={() => handleOpenSettlement(row)}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-orange-50 text-[#F68E5F] border border-orange-100 hover:bg-[#F68E5F] hover:text-white transition-all shadow-sm"
                           >
                             <FileText size={12} /> Settlement
@@ -796,7 +757,7 @@ const SettlementCard = () => {
               {calcLoading ? (
                 <div className="py-16 flex flex-col items-center text-gray-500">
                   <div className="w-8 h-8 border-4 border-[#F68E5F] border-t-transparent rounded-full animate-spin mb-3" />
-                  <p className="text-sm font-semibold">Calculating settlement...</p>
+                  <p className="text-sm font-semibold">Loading settlement...</p>
                 </div>
               ) : (
                 <SettlementSlipPreview

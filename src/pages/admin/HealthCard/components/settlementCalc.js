@@ -1,131 +1,197 @@
-import { PENALTY_AMOUNT } from "./vitranUtils";
+export const SETTLEMENT_TIERS = [160, 200, 240, 280];
 
-export const SETTLEMENT_RATES = [160, 200, 240, 280];
-
-const RATE_BY_MEMBERS = { 1: 160, 2: 160, 3: 160, 4: 160, 5: 200, 6: 240, 7: 280 };
-
-export function memberCountForCard(card) {
-  const explicit = Number(card?.totalMembers ?? card?.totalMember);
-  if (!Number.isNaN(explicit) && explicit > 0) return Math.min(7, explicit);
-  const fromMembers = Array.isArray(card?.members) ? card.members.length + 1 : 1;
-  return Math.min(7, Math.max(1, fromMembers));
-}
-
-/** Fee tier from member count: 1–4 → 160, 5 → 200, 6 → 240, 7 → 280 */
-export function rateFromMemberCount(memberCount) {
-  const n = Math.min(7, Math.max(1, Number(memberCount) || 1));
-  return RATE_BY_MEMBERS[n] || 160;
-}
-
-export function resolveCardRate(card) {
-  const paid = Number(
-    card?.totalAmount ?? card?.payment?.totalAmount ?? card?.payment?.totalPaid ?? 0,
-  );
-  if (SETTLEMENT_RATES.includes(paid)) return paid;
-  return rateFromMemberCount(memberCountForCard(card));
-}
-
-export function isOnlinePaymentCard(card) {
-  const method = String(
-    card?.payment?.method ?? card?.paymentMethod ?? card?.paymentMode ?? "",
-  ).toLowerCase();
-  return (
-    method === "online" ||
-    method.includes("cashfree") ||
-    method.includes("upi") ||
-    method.includes("netbank")
-  );
-}
-
-export function isPenaltyOnline(penalty) {
-  const method = String(penalty?.paymentMethod ?? "").toLowerCase();
-  return method === "online";
-}
-
-function emptyBuckets() {
-  return { 160: { off: 0, on: 0 }, 200: { off: 0, on: 0 }, 240: { off: 0, on: 0 }, 280: { off: 0, on: 0 } };
-}
-
-export function calculateSettlementFromCards(cards = [], penalties = []) {
-  const buckets = emptyBuckets();
-
-  (Array.isArray(cards) ? cards : []).forEach((card) => {
-    const rate = resolveCardRate(card);
-    const channel = isOnlinePaymentCard(card) ? "on" : "off";
-    if (buckets[rate]) buckets[rate][channel] += 1;
-  });
-
-  const off160 = buckets[160].off;
-  const off200 = buckets[200].off;
-  const off240 = buckets[240].off;
-  const off280 = buckets[280].off;
-  const on160 = buckets[160].on;
-  const on200 = buckets[200].on;
-  const on240 = buckets[240].on;
-  const on280 = buckets[280].on;
-
-  const amt160 = off160 * 160;
-  const amt200 = off200 * 200;
-  const amt240 = off240 * 240;
-  const amt280 = off280 * 280;
-  const onAmt160 = on160 * 160;
-  const onAmt200 = on200 * 200;
-  const onAmt240 = on240 * 240;
-  const onAmt280 = on280 * 280;
-
-  let penaltyCount = 0;
-  let onPenaltyCount = 0;
-  let penaltyAmount = 0;
-  let onPenaltyAmount = 0;
-  (Array.isArray(penalties) ? penalties : []).forEach((p) => {
-    const amount = Number(p?.penaltyAmount) || PENALTY_AMOUNT;
-    if (isPenaltyOnline(p)) {
-      onPenaltyCount += 1;
-      onPenaltyAmount += amount;
-    } else {
-      penaltyCount += 1;
-      penaltyAmount += amount;
-    }
-  });
-
-  const offlineCount = off160 + off200 + off240 + off280;
-  const onlineCount = on160 + on200 + on240 + on280;
-  const offlineBaseTotal = amt160 + amt200 + amt240 + amt280;
-  const onlineBaseTotal = onAmt160 + onAmt200 + onAmt240 + onAmt280;
-  const offlineTotalWithPenalty = offlineBaseTotal + penaltyAmount;
-  const onlineTotalWithPenalty = onlineBaseTotal + onPenaltyAmount;
-  const grandTotal = offlineBaseTotal + onlineBaseTotal + penaltyAmount + onPenaltyAmount;
-
+export function normalizeSettlementRecord(record) {
+  if (!record || typeof record !== "object") return null;
   return {
-    off160,
-    off200,
-    off240,
-    off280,
-    on160,
-    on200,
-    on240,
-    on280,
-    amt160,
-    amt200,
-    amt240,
-    amt280,
-    onAmt160,
-    onAmt200,
-    onAmt240,
-    onAmt280,
-    offlineCount,
-    onlineCount,
-    offlineBaseTotal,
-    onlineBaseTotal,
-    penaltyCount,
-    penaltyAmount,
-    onPenaltyCount,
-    onPenaltyAmount,
-    offlineTotalWithPenalty,
-    onlineTotalWithPenalty,
-    grandTotal,
-    totalCards: offlineCount + onlineCount,
+    employeeId: record.employeeId,
+    employeeCode: record.employeeCode,
+    name: record.name,
+    email: record.email,
+    date: record.date,
+    dayCards: Number(record.dayCards) || 0,
+    onlineCards: Number(record.onlineCards) || 0,
+    offlineCards: Number(record.offlineCards) || 0,
+    onlineAmount: Number(record.onlineAmount) || 0,
+    offlineAmount: Number(record.offlineAmount) || 0,
+    totalCollected: Number(record.totalCollected) || 0,
+    amount: Number(record.amount) || 0,
+    status: record.status === "done" ? "done" : "pending",
+    cards: Array.isArray(record.cards) ? record.cards : null,
   };
 }
 
-export const EMPTY_SETTLEMENT = calculateSettlementFromCards([], []);
+function isOnlineCard(card) {
+  return String(card?.collectionType ?? "").toLowerCase() === "online";
+}
+
+function emptyTierRows() {
+  return {
+    off160: 0,
+    off200: 0,
+    off240: 0,
+    off280: 0,
+    on160: 0,
+    on200: 0,
+    on240: 0,
+    on280: 0,
+    amt160: 0,
+    amt200: 0,
+    amt240: 0,
+    amt280: 0,
+    onAmt160: 0,
+    onAmt200: 0,
+    onAmt240: 0,
+    onAmt280: 0,
+    penaltyCount: 0,
+    penaltyAmount: 0,
+    onPenaltyCount: 0,
+    onPenaltyAmount: 0,
+  };
+}
+
+/**
+ * Build receipt display from GET /api/employees/settlements row.
+ * Returns null when cards[] is missing or empty — caller shows "No data".
+ */
+export function settlementDisplayFromApi(settlement) {
+  const normalized = normalizeSettlementRecord(settlement);
+  if (!normalized?.cards?.length) return null;
+
+  const tiers = emptyTierRows();
+
+  normalized.cards.forEach((card) => {
+    const amount = Number(card?.amount) || 0;
+    if (!SETTLEMENT_TIERS.includes(amount)) return;
+    const online = isOnlineCard(card);
+    if (online) {
+      tiers[`on${amount}`] += 1;
+      tiers[`onAmt${amount}`] += amount;
+    } else {
+      tiers[`off${amount}`] += 1;
+      tiers[`amt${amount}`] += amount;
+    }
+  });
+
+  return {
+    ...tiers,
+    totalCards: normalized.dayCards,
+    offlineCount: normalized.offlineCards,
+    onlineCount: normalized.onlineCards,
+    offlineBaseTotal: normalized.offlineAmount,
+    onlineBaseTotal: normalized.onlineAmount,
+    offlineTotalWithPenalty: normalized.offlineAmount,
+    onlineTotalWithPenalty: normalized.onlineAmount,
+    grandTotal: normalized.totalCollected,
+    settlementAmount: normalized.amount,
+    status: normalized.status,
+  };
+}
+
+/** Only tiers / penalty rows that have data from the API. */
+export function getSettlementReceiptRows(calc) {
+  if (!calc) return [];
+
+  const rows = SETTLEMENT_TIERS.flatMap((tier) => {
+    const off = Number(calc[`off${tier}`]) || 0;
+    const on = Number(calc[`on${tier}`]) || 0;
+    const amt = Number(calc[`amt${tier}`]) || 0;
+    const onAmt = Number(calc[`onAmt${tier}`]) || 0;
+    if (off <= 0 && on <= 0 && amt <= 0 && onAmt <= 0) return [];
+    return [{ type: "tier", tier, off, on, amt, onAmt }];
+  });
+
+  const penaltyCount = Number(calc.penaltyCount) || 0;
+  const onPenaltyCount = Number(calc.onPenaltyCount) || 0;
+  const penaltyAmount = Number(calc.penaltyAmount) || 0;
+  const onPenaltyAmount = Number(calc.onPenaltyAmount) || 0;
+  if (penaltyCount > 0 || onPenaltyCount > 0 || penaltyAmount > 0 || onPenaltyAmount > 0) {
+    rows.push({ type: "penalty", penaltyCount, onPenaltyCount, penaltyAmount, onPenaltyAmount });
+  }
+
+  return rows;
+}
+
+export function formatGrandTotalLabel(calc) {
+  if (!calc) return "";
+  const parts = [];
+  if (Number(calc.offlineBaseTotal) > 0) parts.push(calc.offlineBaseTotal);
+  if (Number(calc.onlineBaseTotal) > 0) parts.push(calc.onlineBaseTotal);
+  const penalty = (Number(calc.penaltyAmount) || 0) + (Number(calc.onPenaltyAmount) || 0);
+  if (penalty > 0) parts.push(penalty);
+  if (!parts.length) return `₹${calc.grandTotal}`;
+  return `${parts.join(" + ")} = ₹${calc.grandTotal}`;
+}
+
+const SPACED_EQ = "\u00A0\u00A0=\u00A0\u00A0";
+
+export function formatOnlineAmount(on, onAmt, decimals = 0) {
+  return `${on}${SPACED_EQ}${Number(onAmt).toFixed(decimals)}`;
+}
+
+export function formatTierOfflineLine(tier, off, amt, decimals = 2) {
+  return `${tier} x ${off}${SPACED_EQ}${Number(amt).toFixed(decimals)}`;
+}
+
+export function formatPenaltyOfflineLine(count, amount, decimals = 2) {
+  return `Penalty x ${count}${SPACED_EQ}${Number(amount).toFixed(decimals)}`;
+}
+
+export function formatOfflineTotalPlain(count, amount, decimals = 2) {
+  return `Total = ${count} = ${Number(amount).toFixed(decimals)}`;
+}
+
+export function formatOnlineTotalPlain(count, amount, decimals = 2) {
+  return `${count} = ${Number(amount).toFixed(decimals)}`;
+}
+
+function buildSettlementBodyRowsHtml(calc, decimals = 2) {
+  return getSettlementReceiptRows(calc)
+    .map((row) => {
+      if (row.type === "tier") {
+        return `<tr class="amount-row"><td class="col-offline">${formatTierOfflineLine(row.tier, row.off, row.amt, decimals)}</td><td class="col-online">${formatOnlineAmount(row.on, row.onAmt, 0)}</td></tr>`;
+      }
+      return `<tr class="amount-row"><td class="col-offline">${formatPenaltyOfflineLine(row.penaltyCount, row.penaltyAmount, decimals)}</td><td class="col-online">${formatOnlineAmount(row.onPenaltyCount, row.onPenaltyAmount, 0)}</td></tr>`;
+    })
+    .join("");
+}
+
+export function buildSettlementAmountTableHtml(calc, decimals = 2) {
+  if (!calc) return "";
+  const totalDecimals = decimals === 0 ? 0 : 2;
+  return `
+<table class="amount-table">
+  <colgroup>
+    <col class="col-offline" />
+    <col class="col-online" />
+  </colgroup>
+  <thead>
+    <tr>
+      <th class="col-offline">Card Detail - Amount</th>
+      <th class="col-online">Online - Amount</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${buildSettlementBodyRowsHtml(calc, decimals)}
+  </tbody>
+  <tfoot>
+    <tr class="amount-total">
+      <td class="col-offline">${formatOfflineTotalPlain(calc.offlineCount, calc.offlineTotalWithPenalty, totalDecimals)}</td>
+      <td class="col-online">${formatOnlineTotalPlain(calc.onlineCount, calc.onlineTotalWithPenalty, totalDecimals)}</td>
+    </tr>
+  </tfoot>
+</table>`;
+}
+
+/** @deprecated use buildSettlementAmountTableHtml */
+export function buildSettlementRowsHtml(calc, decimals = 2) {
+  return buildSettlementBodyRowsHtml(calc, decimals);
+}
+
+export const SETTLEMENT_AMOUNT_TABLE_CSS = `
+  .amount-table{width:100%;table-layout:fixed;border-collapse:collapse;font-weight:bold}
+  .amount-table .col-offline{width:52%;text-align:left;vertical-align:top;padding:3px 8px 3px 0}
+  .amount-table .col-online{width:48%;text-align:left;vertical-align:top;padding:3px 0 3px 8px;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .amount-table thead th{border-bottom:1px solid black;font-family:sans-serif;text-transform:uppercase;font-size:9.5px;padding-bottom:3px}
+  .amount-table tbody .amount-row td{border-bottom:1px dashed #e5e5e5;padding-top:4px;padding-bottom:4px}
+  .amount-table tfoot .amount-total td{border-top:1px solid black;padding-top:5px;font-size:10.5px}
+`;

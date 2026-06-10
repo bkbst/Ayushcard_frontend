@@ -1,9 +1,18 @@
 import React from "react";
 import { LOGO_BASE64 } from "../../../../utils/logoBase64";
-import { EMPTY_SETTLEMENT } from "./settlementCalc";
+import {
+  formatGrandTotalLabel,
+  formatOfflineTotalPlain,
+  formatOnlineAmount,
+  formatOnlineTotalPlain,
+  formatPenaltyOfflineLine,
+  formatTierOfflineLine,
+  getSettlementReceiptRows,
+} from "./settlementCalc";
 
-const SettlementSlipPreview = ({ employee, date, calc = EMPTY_SETTLEMENT }) => {
-  const totalPenalty = calc.penaltyAmount + calc.onPenaltyAmount;
+const SettlementSlipPreview = ({ employee, date, calc }) => {
+  const hasData = calc != null;
+  const receiptRows = getSettlementReceiptRows(calc);
 
   return (
     <div
@@ -53,63 +62,81 @@ const SettlementSlipPreview = ({ employee, date, calc = EMPTY_SETTLEMENT }) => {
         </div>
         <div className="border-t border-dashed border-black pt-1 mt-1">
           Total Apply Ayush Card -{" "}
-          <span className="font-mono font-black text-sm">{calc.totalCards ?? employee.totalCards}</span>
+          <span className="font-mono font-black text-sm">
+            {hasData ? (calc.totalCards ?? employee.totalCards ?? 0) : "—"}
+          </span>
         </div>
       </div>
-      <div className="text-center my-3 bg-gray-50 py-0.5 border border-dashed border-black">
-        <span className="text-xs font-extrabold tracking-wide uppercase font-sans">Apply Ayush Card</span>
-      </div>
-      <table className="w-full text-left border-collapse text-[10px] font-bold mb-4">
-        <thead>
-          <tr className="border-b border-black font-sans uppercase">
-            <th className="py-1">Card Detail - Amount</th>
-            <th className="py-1 text-right">Online - Amount</th>
-          </tr>
-        </thead>
-        <tbody className="font-mono">
-          <tr className="border-b border-dashed border-gray-100">
-            <td className="py-1.5">160 x {calc.off160} = {Number(calc.amt160).toFixed(2)}</td>
-            <td className="py-1.5 text-right">{calc.on160} = {Number(calc.onAmt160).toFixed(0)}</td>
-          </tr>
-          <tr className="border-b border-dashed border-gray-100">
-            <td className="py-1.5">200 x {calc.off200} = {Number(calc.amt200).toFixed(2)}</td>
-            <td className="py-1.5 text-right">{calc.on200} = {Number(calc.onAmt200).toFixed(0)}</td>
-          </tr>
-          <tr className="border-b border-dashed border-gray-100">
-            <td className="py-1.5">240 x {calc.off240} = {Number(calc.amt240).toFixed(2)}</td>
-            <td className="py-1.5 text-right">{calc.on240} = {Number(calc.onAmt240).toFixed(0)}</td>
-          </tr>
-          <tr className="border-b border-dashed border-gray-100">
-            <td className="py-1.5">280 x {calc.off280} = {Number(calc.amt280).toFixed(2)}</td>
-            <td className="py-1.5 text-right">{calc.on280} = {Number(calc.onAmt280).toFixed(0)}</td>
-          </tr>
-          <tr className="border-b border-dashed border-gray-100">
-            <td className="py-1.5">
-              Penalty x {calc.penaltyCount} = {Number(calc.penaltyAmount).toFixed(2)}
-            </td>
-            <td className="py-1.5 text-right">
-              {calc.onPenaltyCount} = {Number(calc.onPenaltyAmount).toFixed(0)}
-            </td>
-          </tr>
-          <tr className="border-t border-black font-extrabold text-[10.5px]">
-            <td className="py-2">
-              Total = {calc.offlineCount} = {Number(calc.offlineTotalWithPenalty).toFixed(2)}
-            </td>
-            <td className="py-2 text-right">
-              {calc.onlineCount} = {Number(calc.onlineTotalWithPenalty).toFixed(2)}
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <div className="bg-gray-50 border border-black p-2 text-center rounded-sm font-sans mb-6">
-        <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
-          Calculated Revenue Equation
+
+      {!hasData ? (
+        <div className="text-center py-10 border border-dashed border-gray-300 rounded-sm bg-gray-50 mb-6">
+          <p className="text-sm font-bold text-gray-500 uppercase tracking-wide">No data</p>
+          <p className="text-[10px] text-gray-400 mt-1 font-sans">
+            No settlement card records for this date.
+          </p>
         </div>
-        <div className="text-[10.5px] font-black mt-0.5 leading-tight">
-          Grand Total = {calc.offlineBaseTotal} + {calc.onlineBaseTotal} + {totalPenalty} ={" "}
-          <span className="text-[#F68E5F] font-mono font-black text-sm">₹{calc.grandTotal}</span>
-        </div>
-      </div>
+      ) : (
+        <>
+          <div className="text-center my-3 bg-gray-50 py-0.5 border border-dashed border-black">
+            <span className="text-xs font-extrabold tracking-wide uppercase font-sans">Apply Ayush Card</span>
+          </div>
+          <table
+            className="w-full border-collapse table-fixed text-[10px] font-bold mb-4 font-mono"
+            style={{ fontVariantNumeric: "tabular-nums" }}
+          >
+            <colgroup>
+              <col style={{ width: "52%" }} />
+              <col style={{ width: "48%" }} />
+            </colgroup>
+            <thead>
+              <tr className="border-b border-black font-sans uppercase">
+                <th className="py-1 text-left align-top pr-2">Card Detail - Amount</th>
+                <th className="py-1 text-left align-top whitespace-nowrap pl-2">Online - Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {receiptRows.map((row) =>
+                row.type === "tier" ? (
+                  <tr key={`tier-${row.tier}`} className="border-b border-dashed border-gray-100">
+                    <td className="py-1.5 text-left align-top pr-2 tracking-wide">
+                      {formatTierOfflineLine(row.tier, row.off, row.amt, 2)}
+                    </td>
+                    <td className="py-1.5 text-left align-top whitespace-nowrap pl-2 tracking-wide">
+                      {formatOnlineAmount(row.on, row.onAmt, 0)}
+                    </td>
+                  </tr>
+                ) : (
+                  <tr key="penalty" className="border-b border-dashed border-gray-100">
+                    <td className="py-1.5 text-left align-top pr-2 tracking-wide">
+                      {formatPenaltyOfflineLine(row.penaltyCount, row.penaltyAmount, 2)}
+                    </td>
+                    <td className="py-1.5 text-left align-top whitespace-nowrap pl-2 tracking-wide">
+                      {formatOnlineAmount(row.onPenaltyCount, row.onPenaltyAmount, 0)}
+                    </td>
+                  </tr>
+                ),
+              )}
+              <tr className="border-t border-black font-extrabold text-[10.5px]">
+                <td className="py-2 text-left align-top pr-2">
+                  {formatOfflineTotalPlain(calc.offlineCount, calc.offlineTotalWithPenalty, 2)}
+                </td>
+                <td className="py-2 text-left align-top whitespace-nowrap pl-2">
+                  {formatOnlineTotalPlain(calc.onlineCount, calc.onlineTotalWithPenalty, 2)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div className="bg-gray-50 border border-black p-2 text-center rounded-sm font-sans mb-6">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
+              Calculated Revenue Equation
+            </div>
+            <div className="text-[10.5px] font-black mt-0.5 leading-tight">
+              Grand Total = {formatGrandTotalLabel(calc)}
+            </div>
+          </div>
+        </>
+      )}
+
       <div className="space-y-4 font-bold my-4 border-t border-dashed border-black pt-3">
         <div>Cash Receiver Name : __________________</div>
         <div>Cash Receiver ID No :- __________________</div>

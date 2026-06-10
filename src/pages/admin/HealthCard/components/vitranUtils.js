@@ -31,9 +31,6 @@ export const generateDupReceiptNo = () => {
   return `DUP-${datePart}-${rand}`;
 };
 
-// ─── SETTLEMENT (see settlementCalc.js) ─────────────────────────────────────
-export { calculateSettlementFromCards, EMPTY_SETTLEMENT } from "./settlementCalc";
-
 // ─── HELPER: map a normalized health card to the shape used by the duplicate receipt flow ─
 export const toDupCardShape = (card, createdByMap = {}) => {
   const empRaw = card.createdBy;
